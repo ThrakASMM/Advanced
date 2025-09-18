@@ -1,666 +1,756 @@
+// Ear Training 4-sons — Full + Voicings (Close / Drop 2 / Both)
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('start-game').addEventListener('click', startGame);
-    document.getElementById('back-to-menu').addEventListener('click', backToMenu);
-    document.getElementById('restart-test').addEventListener('click', restartTest);
-    document.getElementById('next-question').addEventListener('click', skipQuestion);
 
-    const notes = {};
-    const noteMap = {
-        'C': 0, 'Db': 1, 'D': 2, 'Eb': 3, 'E': 4, 'F': 5, 'Gb': 6, 'G': 7, 'Ab': 8, 'A': 9, 'Bb': 10, 'B': 11
-    };
-    const reverseNoteMap = Object.keys(noteMap).reduce((acc, key) => {
-        acc[noteMap[key]] = key;
-        return acc;
-    }, {});
-    const enharmonicMap = {
-        'Db': 'C#', 'Eb': 'D#', 'Gb': 'F#', 'Ab': 'G#', 'Bb': 'A#'
-    };
-    const fourSoundsStructures = [
-        { type: 'Maj7', intervals: [4, 3, 4], inversion: 'PF' },
-        { type: 'Min7', intervals: [3, 4, 3], inversion: 'PF' },
-        { type: '7', intervals: [4, 3, 3], inversion: 'PF' },
-        { type: '-7b5', intervals: [3, 3, 4], inversion: 'PF' },
-        { type: 'TBN 1', intervals: [2, 4, 3], inversion: 'PF' },
+  /* ============================
+   0) RÉGLAGES AUDIO (release doux)
+   ============================ */
+  const AUDIOCFG = {
+    simult_volume: 0.9,
+    simult_hold: 2800,
+    simult_fade: 420,
+    seq_gap: 600,
+    seq_extra_hold: 300,
+    seq_last_hold: 1500,
+    seq_note_fade: 220,
+    seq_last_fade: 300,
+    ref_min_delay_simul: 1500,
+    ref_hold_margin: 50,
+    timings: {
+      test:       { preDelayMs: 1500, playbackMs: 4000, noteGapMs: 0 },
+      sequential: { preDelayMs: 800,  playbackMs: 2200, noteGapMs: 600 },
+      training:   { preDelayMs: 400,  playbackMs: 5000, noteGapMs: 0 }
+    }
+  };
 
+  /* ============================
+     1) CONSTANTES / DOM
+     ============================ */
+  const EXAM_TIME_LIMIT_S = 60;
+  const TOTAL_QUESTIONS_DEFAULT = 10;
 
-        { type: 'Maj7', intervals: [3, 4, 1], inversion: 'R1' },
-        { type: 'Min7', intervals: [4, 3, 2], inversion: 'R1' },
-        { type: '7', intervals: [3, 3, 2], inversion: 'R1' },
-        { type: '-7b5', intervals: [3, 4, 2], inversion: 'R1' },
+  const SCORE_IMG_PATH = 'img';
+  const SCORE_IMG = {
+    success: `${SCORE_IMG_PATH}/success.png`,
+    ok:      `${SCORE_IMG_PATH}/ok.png`,
+    fail:    `${SCORE_IMG_PATH}/fail.png`,
+  };
 
-        { type: 'Maj7', intervals: [4, 1, 4], inversion: 'R2' },
-        { type: 'Min7', intervals: [3, 2, 3], inversion: 'R2' },
-        { type: '7', intervals: [3, 2, 4], inversion: 'R2' },
-        { type: '-7b5', intervals: [4, 2, 3], inversion: 'R2' },
+  const AUDIO_MIN_OCT = 2; // fichiers audio C2..B4
+  const AUDIO_MAX_OCT = 4;
+  const MAX_TOP_OCT   = 6;
 
+  // DOM
+  const $ = id=>document.getElementById(id);
+  const progressDiv=$('progress'), scoreDiv=$('score'), timingDiv=$('timing'),
+        menu=$('menu'), game=$('game'), questionDiv=$('question'),
+        validationDiv=$('validation-message'), resultDiv=$('result');
 
-        { type: 'Maj7', intervals: [1, 4, 3], inversion: 'R3' },
-        { type: 'Min7', intervals: [2, 3, 4], inversion: 'R3' },
-        { type: '7', intervals: [2, 4, 3], inversion: 'R3' },
-        { type: '-7b5', intervals: [2, 3, 3], inversion: 'R3' },
-    
-        // Maj7 D2 inversions
-        { type: 'Maj7 D2', intervals: [7, 4, 5], inversion: 'PF' },
-        { type: 'Maj7 D2', intervals: [7, 1, 7], inversion: 'R1' },
-        { type: 'Maj7 D2', intervals: [5, 4, 7], inversion: 'R2' },
-        { type: 'Maj7 D2', intervals: [5, 3, 5], inversion: 'R3' },
-    
-        // Min7 D2 inversions
-        { type: 'Min7 D2', intervals: [7, 3, 5], inversion: 'PF' },
-        { type: 'Min7 D2', intervals: [7, 2, 7], inversion: 'R1' },
-        { type: 'Min7 D2', intervals: [5, 3, 7], inversion: 'R2' },
-        { type: 'Min7 D2', intervals: [5, 4, 5], inversion: 'R3' },
-    
-        // Dim7 and Dim7 D2 (without inversions)
-        { type: 'Dim7', intervals: [3, 3, 3], inversion: 'PF' },
-        { type: 'Dim7 D2', intervals: [6, 3, 6], inversion: 'PF' },
-    
-        // 7sus4 inversions
-        { type: '7sus4', intervals: [5, 2, 3], inversion: 'PF' },
-        { type: '7sus4', intervals: [2, 3, 2], inversion: 'R1' },
-        { type: '7sus4', intervals: [3, 2, 5], inversion: 'R2' },
-        { type: '7sus4', intervals: [2, 5, 2], inversion: 'R3' },
-    
-        // 7sus4 D2 inversions
-        { type: '7sus4 D2', intervals: [7, 3, 7], inversion: 'PF' },
-        { type: '7sus4 D2', intervals: [5, 2, 7], inversion: 'R1' },
-        { type: '7sus4 D2', intervals: [5, 5, 5], inversion: 'R2' },
-        { type: '7sus4 D2', intervals: [7, 2, 5], inversion: 'R3' },
+  const startBtn=$('start-game'), backBtn=$('back-to-menu'), restartBtn=$('restart-test'),
+        nextBtn=$('next-question'), replayBothBtn=$('replay-single-and-chord'),
+        replayChordBtn=$('replay-chord-only'), submitBtn=$('submit-answer');
 
-        // 7 D2 inversions
-        { type: '7 D2', intervals: [7, 3, 6], inversion: 'PF' },
-        { type: '7 D2', intervals: [6, 2, 7], inversion: 'R1' },
-        { type: '7 D2', intervals: [5, 4, 6], inversion: 'R2' },
-        { type: '7 D2', intervals: [6, 3, 5], inversion: 'R3' },
+  const voicingSelect=$('voicing-select'), chordSelect=$('chord-select'),
+        inversionSelect=$('inversion-select'), fundamentalSelect=$('fundamental-select');
 
-        // -7b5 D2 inversions
-        { type: '-7b5 D2', intervals: [6, 4, 5], inversion: 'PF' },
-        { type: '-7b5 D2', intervals: [7, 2, 6], inversion: 'R1' },
-        { type: '-7b5 D2', intervals: [6, 3, 7], inversion: 'R2' },
-        { type: '7 D2', intervals: [5, 3, 6], inversion: 'R3' },
+  const chordPicker=$('chord-picker'), chordChecksWrap=$('chord-checks'),
+        chordWarning=$('chord-warning'), selectAllBtnChords=$('select-all-chords'),
+        deselectAllBtnChords=$('deselect-all-chords'), selectedCountEl=$('selected-count');
 
-        // TBN 1 D2 inversions
-        { type: 'TBN 1 D2', intervals: [6, 3, 5], inversion: 'PF' },
+  const getGametype = () => document.querySelector('[name="gametype"]:checked')?.value || 'training';
+  const getMode     = () => document.querySelector('[name="mode"]:checked')?.value || 'sequential';
+  const getVoicingMode = () => document.querySelector('[name="voicingMode"]:checked')?.value || 'close';
 
+  // Notes & noms
+  const noteMap={C:0,Db:1,D:2,Eb:3,E:4,F:5,Gb:6,G:7,Ab:8,A:9,Bb:10,B:11};
+  const reverseNoteMap=Object.keys(noteMap).reduce((a,k)=>(a[noteMap[k]]=k,a),{});
+  const enharm={Db:'C#',Eb:'D#',Gb:'F#',Ab:'G#',Bb:'A#'};
+  const enhText = n => {
+    const name=n.slice(0,-1), o=n.slice(-1);
+    return enharm[name] ? `${name}/${enharm[name]}${o}` : n;
+  };
 
-    ];
-    
-    const triads = [
-        { name: 'Major 7', label: 'Maj7' },
-        { name: 'Minor 7', label: 'Min7' },
-        { name: '7sus4', label: '7sus4' },
-        { name: 'Diminished 7', label: 'Dim7' },
-        { name: '7', label: '7' },
-        { name: '-7b5', label: '-7b5' },
-        { name: 'TBN 1', label: 'TBN 1' },
+  const ALL_CHORDS = ['Maj7','Min7','7sus4','7','-7b5'];
+  const INVERSIONS = ['Root Position','First Inversion','Second Inversion','Third Inversion'];
 
+  /* ============================
+     2) STRUCTURES 4-SONS (CLOSE)
+     ============================ */
+  const chordStructuresMaster = [
+    // PF
+    { type:'Maj7',  intervals:[4,3,4], inversion:'PF' },
+    { type:'Min7',  intervals:[3,4,3], inversion:'PF' },
+    { type:'7sus4', intervals:[5,2,3], inversion:'PF' },
+    { type:'7',     intervals:[4,3,3], inversion:'PF' },
+    { type:'-7b5',  intervals:[3,3,4], inversion:'PF' },
+    // R1
+    { type:'Maj7',  intervals:[3,4,1], inversion:'R1' },
+    { type:'Min7',  intervals:[4,3,2], inversion:'R1' },
+    { type:'7sus4', intervals:[2,3,2], inversion:'R1' },
+    { type:'7',     intervals:[3,3,2], inversion:'R1' },
+    { type:'-7b5',  intervals:[3,4,2], inversion:'R1' },
+    // R2
+    { type:'Maj7',  intervals:[4,1,4], inversion:'R2' },
+    { type:'Min7',  intervals:[3,2,3], inversion:'R2' },
+    { type:'7sus4', intervals:[3,2,5], inversion:'R2' },
+    { type:'7',     intervals:[3,2,4], inversion:'R2' },
+    { type:'-7b5',  intervals:[4,2,3], inversion:'R2' },
+    // R3
+    { type:'Maj7',  intervals:[1,4,3], inversion:'R3' },
+    { type:'Min7',  intervals:[2,3,4], inversion:'R3' },
+    { type:'7sus4', intervals:[2,5,2], inversion:'R3' },
+    { type:'7',     intervals:[2,4,3], inversion:'R3' },
+    { type:'-7b5',  intervals:[2,3,3], inversion:'R3' },
+  ];
 
+  /* ============================
+     3) AUDIO HTML5 + TIMERS
+     ============================ */
+  const notes={};
+  for(let o=AUDIO_MIN_OCT;o<=AUDIO_MAX_OCT;o++){
+    Object.keys(noteMap).forEach(n=>notes[`${n}${o}`]=`audio/${n}${o}.mp3`);
+  }
+  const audioCache={}, activeAudios=new Set(), pendingTimers=new Set();
+  function later(cb,ms){const id=setTimeout(()=>{pendingTimers.delete(id);try{cb();}catch{}},ms);pendingTimers.add(id);return id;}
+  function clearAllTimers(){pendingTimers.forEach(id=>clearTimeout(id));pendingTimers.clear();}
+  function getAudioSafe(noteKey){
+    if(!audioCache[noteKey]){ const a=new Audio(notes[noteKey]); a.preload='auto'; audioCache[noteKey]=a; }
+    const clone=new Audio(audioCache[noteKey].src); clone.preload='auto'; return clone;
+  }
+  function stopWithFade(audio, fadeMs=220){
+    try{
+      const steps=8, stepDur=Math.max(10,Math.floor(fadeMs/steps)); let i=0, startVol=audio.volume;
+      const iv=setInterval(()=>{ i++; audio.volume=startVol*Math.max(0,1-i/steps);
+        if(i>=steps){ clearInterval(iv); try{audio.pause();audio.currentTime=0;}catch{} audio.volume=startVol; activeAudios.delete(audio); }
+      }, stepDur);
+    }catch{}
+  }
+  function stopAllAudioNow(){ try{ activeAudios.forEach(a=>{try{a.pause();a.currentTime=0;}catch{}}); activeAudios.clear(); clearAllTimers(); }catch{} }
+  function playNote(noteKey,{volume=1,startDelayMs=0,maxDurMs=1200,fadeOutMs=0}={}){
+    const a=getAudioSafe(noteKey); a.volume=volume; activeAudios.add(a);
+    later(()=>{try{a.currentTime=0; a.play().catch(()=>{});}catch{}}, Math.max(0,startDelayMs));
+    if(maxDurMs>0){ later(()=>{ fadeOutMs>0?stopWithFade(a,fadeOutMs):(a.pause(),a.currentTime=0,activeAudios.delete(a)); }, startDelayMs+maxDurMs); }
+  }
+  function playChordArray(arr){
+    if(getMode()==='sequential'){
+      const gap=Math.max(400,AUDIOCFG.seq_gap), lastH=AUDIOCFG.seq_last_hold;
+      arr.forEach((n,i)=>{ const start=i*gap, last=i===arr.length-1, hold= last?lastH:(gap+AUDIOCFG.seq_extra_hold), fade= last?AUDIOCFG.seq_last_fade:AUDIOCFG.seq_note_fade; playNote(n,{volume:1,startDelayMs:start,maxDurMs:hold,fadeOutMs:fade}); });
+    }else{
+      const hold=AUDIOCFG.simult_hold;
+      arr.forEach(n=>playNote(n,{volume:AUDIOCFG.simult_volume,startDelayMs:0,maxDurMs:hold,fadeOutMs:AUDIOCFG.simult_fade}));
+    }
+  }
 
-        { name: 'Major 7 D2', label: 'Maj7 D2' },
-        { name: 'Minor 7 D2', label: 'Min7 D2' },
-        { name: '7sus4 D2', label: '7sus4 D2' },
-        { name: 'Diminished 7 D2', label: 'Dim7 D2' },
-        { name: '7 D2', label: '7 D2' },
-        { name: '-7b5 D2', label: '-7b5 D2' },
-        { name: 'TBN 1 D2', label: 'TBN 1 D2' },
-   ];
-    
-    const inversions = ['Root Position', 'First Inversion', 'Second Inversion', 'Third Inversion'];
-    
-    for (let octave = 2; octave <= 5; octave++) {
-        Object.keys(noteMap).forEach(note => {
-            notes[`${note}${octave}`] = `audio/${note}${octave}.mp3`;
-        });
+  /* ============================
+     4) ÉTAT
+     ============================ */
+  let config = {
+    gametype: 'training',
+    mode: 'sequential',
+    voicingMode: 'close', // 'close' | 'drop2' | 'both'
+    allowedChords: ALL_CHORDS.slice(),
+    preDelayMs: AUDIOCFG.timings.training.preDelayMs,
+    playbackMs: AUDIOCFG.timings.training.playbackMs,
+    noteGapMs: AUDIOCFG.timings.training.noteGapMs,
+    totalQuestions: TOTAL_QUESTIONS_DEFAULT,
+  };
+  let chordPool = chordStructuresMaster;
+
+  let currentNotes=null, firstNotePlayed=null, correctAnswer='', correctVoicing='close';
+  let questionIndex=-1, scoreTotal=0, examPointsByIndex=[], gamePointsByIndex=[];
+  let startTime=null, questionStartTime=null, answeredThisQuestion=false;
+
+  /* ============================
+     5) UTILS MUSICAUX
+     ============================ */
+  const splitNote=n=>({idx:noteMap[n.slice(0,-1)], oct:parseInt(n.slice(-1),10)});
+  const makeNote=(idx,oct)=>`${reverseNoteMap[(idx+12)%12]}${oct}`;
+  const midiIndex=n=>{const s=splitNote(n); return s.idx+12*s.oct;};
+  const byMidi=(a,b)=>midiIndex(a)-midiIndex(b);
+  const getRandom = arr => arr[Math.floor(Math.random()*arr.length)];
+
+  function getRandomBaseNote(){
+    const startOct=AUDIO_MIN_OCT, endOct=Math.max(AUDIO_MIN_OCT, AUDIO_MAX_OCT-1);
+    const oct = Math.floor(Math.random()*(endOct-startOct+1))+startOct;
+    const name=getRandom(Object.keys(noteMap));
+    return `${name}${oct}`;
+  }
+
+  // Close voicing builder
+  function buildClose(baseNote, structure){
+    const b=splitNote(baseNote);
+    const arr=[baseNote];
+    let cur=b.idx, oct=b.oct;
+    structure.intervals.forEach(step=>{
+      const next=(cur+step)%12;
+      if(next<cur) oct=Math.min(AUDIO_MAX_OCT, oct+1);
+      arr.push(makeNote(next,oct));
+      cur=next;
+    });
+    arr.sort(byMidi);
+    const low=splitNote(arr[0]).oct, maxOct=low+1;
+    for(let i=1;i<arr.length;i++){ const s=splitNote(arr[i]); if(s.oct>maxOct) arr[i]=makeNote(s.idx,maxOct); }
+    const top=splitNote(arr[arr.length-1]);
+    if(top.oct>MAX_TOP_OCT) arr[arr.length-1]=makeNote(top.idx,MAX_TOP_OCT);
+    return arr.sort(byMidi);
+  }
+
+  // Drop 2 : monte la 2e note (du grave vers l’aigu) d’une octave
+  function toDrop2(arr){
+    const out=arr.slice().sort(byMidi);
+    const s=splitNote(out[1]);
+    out[1]=makeNote(s.idx, s.oct+1);
+    out.sort(byMidi);
+    const top=splitNote(out[out.length-1]);
+    if(top.oct>MAX_TOP_OCT){ out[out.length-1]=makeNote(top.idx,MAX_TOP_OCT); }
+    return out;
+  }
+
+  function analyzeChord(arrClose){
+    const a=arrClose.slice().sort(byMidi);
+    const [n1,n2,n3,n4]=a;
+    const im=(x,y)=> (noteMap[y.slice(0,-1)]-noteMap[x.slice(0,-1)]+12)%12;
+    const i1=im(n1,n2), i2=im(n2,n3), i3=im(n3,n4);
+    const found=chordStructuresMaster.find(s=>s.intervals[0]===i1 && s.intervals[1]===i2 && s.intervals[2]===i3);
+    if(!found) return { chordType:'', inversion:'', fundamental:'' };
+    let fundamental=n1.slice(0,-1);
+    if(found.inversion==='R1') fundamental=n4.slice(0,-1);
+    else if(found.inversion==='R2') fundamental=n3.slice(0,-1);
+    else if(found.inversion==='R3') fundamental=n2.slice(0,-1);
+    return { chordType:found.type, inversion:found.inversion, fundamental };
+  }
+
+  function parseAnswer(str){
+    const invs=['PF','R1','R2','R3']; const inv=invs.find(s=>str.endsWith(s))||'PF';
+    const body=str.slice(0,-inv.length); const types=ALL_CHORDS.slice();
+    let chord='', tonic=''; for(const t of types){ if(body.endsWith(t)){ chord=t; tonic=body.slice(0, body.length-t.length); break; } }
+    return { fund:tonic, chord, inv };
+  }
+
+  /* ============================
+     6) CHECKBOXES (menu)
+     ============================ */
+  function updateSelectedCount(){
+    const n=chordChecksWrap.querySelectorAll('input[type="checkbox"]:checked').length;
+    selectedCountEl.textContent=`${n} sélectionnée${n>1?'s':''}`;
+  }
+  chordChecksWrap.addEventListener('change',()=>{applySettings(); updateSelectedCount();});
+  selectAllBtnChords.onclick=()=>{chordChecksWrap.querySelectorAll('input').forEach(c=>c.checked=true); applySettings(); updateSelectedCount();};
+  deselectAllBtnChords.onclick=()=>{chordChecksWrap.querySelectorAll('input').forEach(c=>c.checked=false); applySettings(); updateSelectedCount();};
+  updateSelectedCount();
+
+  /* ============================
+     7) RÉGLAGES & AFFICHAGES
+     ============================ */
+  function applySettings(){
+    config.gametype = getGametype();
+    config.mode     = getMode();
+    config.voicingMode = getVoicingMode();
+
+    const checked = Array.from(chordChecksWrap.querySelectorAll('input:checked')).map(c=>c.value);
+    config.allowedChords = checked;
+    chordWarning.style.display = checked.length ? 'none' : 'block';
+
+    const base = (config.gametype==='training') ? AUDIOCFG.timings.training :
+                 (config.mode==='sequential' ? AUDIOCFG.timings.sequential : AUDIOCFG.timings.test);
+    config.preDelayMs = base.preDelayMs;
+    config.playbackMs = base.playbackMs;
+    config.noteGapMs  = base.noteGapMs || 0;
+
+    config.totalQuestions = TOTAL_QUESTIONS_DEFAULT;
+
+    chordPool = chordStructuresMaster.filter(s=>config.allowedChords.includes(s.type));
+  }
+  document.querySelectorAll('[name="gametype"]').forEach(r=>r.addEventListener('change',applySettings));
+  document.querySelectorAll('[name="mode"]').forEach(r=>r.addEventListener('change',applySettings));
+  document.querySelectorAll('[name="voicingMode"]').forEach(r=>r.addEventListener('change',applySettings));
+  applySettings();
+
+  /* ============================
+     8) LANCEMENT / NAV
+     ============================ */
+  startBtn.onclick = startGame;
+  backBtn.onclick  = ()=>backToMenu();
+  restartBtn.onclick = startGame;
+
+  nextBtn.onclick = () => {
+    stopAllAudioNow();
+    if (config.gametype === 'test') {
+      if (!answeredThisQuestion && questionIndex >= 0 && questionIndex < config.totalQuestions) {
+        examPointsByIndex[questionIndex] = 0;
+        gamePointsByIndex[questionIndex] = 0;
+        answeredThisQuestion = true;
+      }
+      advance();
+    } else {
+      nextTrainingQuestion();
+    }
+  };
+  replayBothBtn.onclick  = () => { stopAllAudioNow(); playOneThenChord(); };
+  replayChordBtn.onclick = () => { stopAllAudioNow(); playChordArray(currentNotes); };
+  submitBtn.onclick      = () => { stopAllAudioNow(); validateAnswer(); };
+
+  async function startGame(){
+    applySettings();
+    if (!config.allowedChords.length){ chordWarning.style.display='block'; return; }
+
+    menu.style.display='none';
+    game.style.display='block';
+    resultDiv.textContent='';
+    validationDiv.textContent='';
+
+    stopAllAudioNow();
+    answeredThisQuestion = false;
+
+    buildSelects();
+
+    startTime = Date.now();
+    startHudTimer();
+    try{ window.scrollTo({top:0,behavior:'smooth'}); }catch(_){}
+
+    if (config.gametype === 'test') {
+      questionIndex = -1;
+      scoreTotal = 0;
+      examPointsByIndex = new Array(config.totalQuestions).fill(null);
+      gamePointsByIndex = new Array(config.totalQuestions).fill(0);
+      advance();
+    } else {
+      questionIndex = 0;
+      nextTrainingQuestion();
+    }
+  }
+
+  function backToMenu(){
+    stopAllAudioNow();
+    stopHudTimer();
+    game.style.display='none';
+    menu.style.display='block';
+  }
+
+  /* ============================
+     9) TEST — SÉRIE & FIN
+     ============================ */
+  function advance(){
+    questionIndex += 1;
+    if (questionIndex >= config.totalQuestions) { endGame(); return; }
+    nextQuestionCommon();
+  }
+
+  function endGame(){
+    stopHudTimer();
+    const timeTaken = ((Date.now()-startTime)/1000);
+    const timeTakenText = timeTaken.toFixed(2);
+
+    const finalizedExam = examPointsByIndex.map(v => (v==null ? 0 : v)).slice(0, config.totalQuestions);
+    const grade20 = finalizedExam.reduce((a,b)=>a+b,0);
+
+    const twoPts = finalizedExam.filter(v=>v===2).length;
+    const onePt  = finalizedExam.filter(v=>v===1).length;
+    const zeroPt = config.totalQuestions - twoPts - onePt;
+
+    let label, img;
+    if (grade20 >= 16) { label='Très bien'; img=SCORE_IMG.success; }
+    else if (grade20 >= 10) { label='Correct'; img=SCORE_IMG.ok; }
+    else { label='Insuffisant'; img=SCORE_IMG.fail; }
+
+    resultDiv.innerHTML = `
+      <section class="result-summary">
+        <p class="result-title"><strong>Test terminé !</strong></p>
+        <p class="result-grade">${label}</p>
+        <div class="trophy-block">
+          <img src="${img}" alt="${label}" class="score-img" onerror="this.style.display='none'"/>
+        </div>
+        <p class="result-line">Score : <strong>${scoreTotal}</strong></p>
+        <p class="result-line">Note : <strong>${Math.round(grade20)}/20</strong>
+           <span class="result-sub">(${twoPts}×2 pts, ${onePt}×1 pt, ${zeroPt}×0 pt)</span>
+        </p>
+        <p class="result-line">Temps total : ${timeTakenText}s</p>
+      </section>
+      <section id="scoreboard"></section>
+    `;
+
+    const avgPerQuestion = (config.totalQuestions > 0) ? (timeTaken / config.totalQuestions) : 0;
+    saveScore({
+      validatedFull: twoPts,
+      validatedHalf: onePt,
+      grade20: grade20,
+      score: scoreTotal,
+      avgTime: avgPerQuestion
+    });
+
+    nextBtn.disabled=true;
+    renderScoreboard();
+    try{ window.scrollTo({top:0,behavior:'smooth'}); }catch(_){}
+  }
+
+  function renderScoreboard() {
+    const mount = $('scoreboard');
+    if (!mount) return;
+
+    const all = loadScores();
+
+    mount.innerHTML = '';
+    if (!all || !all.length) return;
+
+    const top5 = all.slice().sort((a, b) => {
+      const g = (b.grade20 || 0) - (a.grade20 || 0);
+      return g !== 0 ? g : ((b.score || 0) - (a.score || 0));
+    }).slice(0, 5);
+
+    const h3 = document.createElement('h3');
+    h3.className = 'result-h3';
+    h3.textContent = 'Top 5 — Meilleurs scores';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'table-wrap';
+
+    const table = document.createElement('table');
+    table.className = 'score-table';
+
+    const thead = document.createElement('thead');
+    thead.innerHTML =
+      '<tr>' +
+        '<th>Rang</th>' +
+        '<th>Note</th>' +
+        '<th>Score</th>' +
+        '<th>Mode</th>' +
+        '<th>Accords</th>' +
+        '<th>Temps moyen</th>' +
+      '</tr>';
+
+    const tbody = document.createElement('tbody');
+
+    top5.forEach((s, idx) => {
+      const tr = document.createElement('tr');
+
+      const td = (label, text) => {
+        const cell = document.createElement('td');
+        cell.setAttribute('data-label', label);
+        cell.textContent = text;
+        return cell;
+      };
+
+      const modeText =
+        (s.gametype || '-') + ' / ' + (s.mode || '-') +
+        (s.voicingMode ? (' / ' + s.voicingMode) : '');
+
+      const chordsText =
+        (Array.isArray(s.chords) && s.chords.length) ? s.chords.join(', ') : '—';
+
+      const avgTimeText =
+        (typeof s.avgTime === 'number' ? s.avgTime.toFixed(1) : '0.0') + 's';
+
+      tr.appendChild(td('Rang', '#' + (idx + 1)));
+      tr.appendChild(td('Note', String(Math.round(s.grade20 || 0)) + '/20'));
+      tr.appendChild(td('Score', String(s.score || 0)));
+      tr.appendChild(td('Mode', modeText));
+      tr.appendChild(td('Accords', chordsText));
+      tr.appendChild(td('Temps moyen', avgTimeText));
+
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+
+    mount.appendChild(h3);
+    mount.appendChild(wrap);
+  }
+
+  const SCORE_KEY = 'tetradScores';
+  function loadScores(){ try{ return JSON.parse(localStorage.getItem(SCORE_KEY)||'[]'); }catch(_){ return []; } }
+  function saveScore(entry){
+    const all=loadScores();
+    all.push({
+      date: new Date().toISOString(),
+      mode: config.mode,
+      gametype: config.gametype,
+      voicingMode: config.voicingMode,
+      chords: (config.allowedChords||[]).slice(),
+      total: config.totalQuestions,
+      validatedFull: entry.validatedFull,
+      validatedHalf: entry.validatedHalf,
+      grade20: Math.round(entry.grade20),
+      score: entry.score,
+      avgTime: entry.avgTime
+    });
+    localStorage.setItem(SCORE_KEY, JSON.stringify(all));
+  }
+
+  /* ============================
+     10) QUESTIONS — COMMUN
+     ============================ */
+  function nextQuestionCommon(){
+    validationDiv.textContent='';
+    resultDiv.textContent='';
+    nextBtn.disabled=false;
+
+    answeredThisQuestion = false;
+    submitBtn.disabled = false;
+
+    chordSelect.selectedIndex = 0;
+    inversionSelect.selectedIndex = 0;
+    fundamentalSelect.selectedIndex = 0;
+    voicingSelect.value = (config.voicingMode==='drop2'?'drop2':'close');
+
+    // Patch UX : afficher le select voicing seulement en mode "Both"
+    if (config.voicingMode === 'both') {
+      voicingSelect.style.display = '';
+    } else {
+      voicingSelect.style.display = 'none';
     }
 
-    let currentTriad;
-    let currentNotes;
-    let correctAnswer;
-    let questionCount = 0;
-    let correctAnswers = 0;
-    const totalQuestions = 10;
-    let preloadedSounds = {};
-    let startTime;
-    let endTime;
-    let firstNotePlayed;
+    updateHud();
+    generateQuestion();
+  }
 
-    function startGame() {
-        document.getElementById('menu').style.display = 'none';
-        document.getElementById('game').style.display = 'block';
-        document.getElementById('back-to-menu').style.display = 'block';
-        document.getElementById('restart-test').style.display = 'block';
-        document.getElementById('next-question').style.display = 'block';
-        questionCount = 0;
-        correctAnswers = 0;
-        startTime = new Date();
-        preloadSounds();
-        nextQuestion();
+  function nextTrainingQuestion(){
+    validationDiv.textContent='';
+    resultDiv.textContent='';
+    nextBtn.disabled=false;
+    answeredThisQuestion = false;
+    submitBtn.disabled = false;
+
+    chordSelect.selectedIndex = 0;
+    inversionSelect.selectedIndex = 0;
+    fundamentalSelect.selectedIndex = 0;
+    voicingSelect.value = (config.voicingMode==='drop2'?'drop2':'close');
+
+    // Patch UX : afficher le select voicing seulement en mode "Both"
+    if (config.voicingMode === 'both') {
+      voicingSelect.style.display = '';
+    } else {
+      voicingSelect.style.display = 'none';
     }
 
-    function preloadSounds() {
-        Object.keys(notes).forEach(note => {
-            preloadedSounds[note] = new Audio(notes[note]);
-            preloadedSounds[note].addEventListener('canplaythrough', () => {
-                console.log(`Preloaded sound: ${note}`);
-            }, false);
-            preloadedSounds[note].addEventListener('error', () => {
-                console.error(`Failed to preload sound: ${note}`);
-            });
-        });
+    progressDiv.textContent = 'Entraînement libre';
+    scoreDiv.textContent = '';
+
+    generateQuestion();
+  }
+
+  function buildSelects(){
+    // familles
+    chordSelect.innerHTML = '';
+    (config.allowedChords.length?config.allowedChords:ALL_CHORDS).forEach(t=>{
+      const o=document.createElement('option'); o.value=t; o.textContent=t; chordSelect.appendChild(o);
+    });
+
+    // inversions
+    inversionSelect.innerHTML = '';
+    INVERSIONS.forEach(inv=>{ const o=document.createElement('option'); o.value=inv; o.textContent=inv; inversionSelect.appendChild(o); });
+
+    // fondamentales
+    fundamentalSelect.innerHTML = '';
+    Object.keys(noteMap).forEach(n=>{
+      const o=document.createElement('option'); const e=enharm[n]; o.value=n; o.textContent = e?`${n}/${e}`:n; fundamentalSelect.appendChild(o);
+    });
+
+    // voicing (sélecteur de réponse)
+    voicingSelect.value=(config.voicingMode==='drop2'?'drop2':'close');
+  }
+
+  function getRefAndChordDelay() {
+    let base = Math.max(80, config.preDelayMs || 400);
+    if (getMode() === 'simultaneous') {
+      base = Math.max(base, AUDIOCFG.ref_min_delay_simul);
+    } else {
+      const gap = Math.max( Math.max(400, config.noteGapMs || AUDIOCFG.seq_gap), 0 );
+      base += gap;
+    }
+    return base;
+  }
+
+  function playOneThenChord(){
+    stopAllAudioNow();
+    const delay   = getRefAndChordDelay();
+    const refHold = Math.max(300, delay - AUDIOCFG.ref_hold_margin);
+    playNote(firstNotePlayed, { volume: 1.0, startDelayMs: 0, maxDurMs: refHold, fadeOutMs: 0 });
+    later(() => { playChordArray(currentNotes); }, delay);
+  }
+
+
+  function generateQuestion(){
+    const structure = getRandom(chordPool);
+    const baseNote  = getRandomBaseNote();
+
+    // 1) on génère TOUJOURS le voicing serré (close)
+    const close = buildClose(baseNote, structure);
+
+    // 2) choisir voicing effectif selon config
+    let effectiveVoicing = 'close';
+    if (config.voicingMode === 'drop2') effectiveVoicing = 'drop2';
+    else if (config.voicingMode === 'both') effectiveVoicing = (Math.random()<0.5?'close':'drop2');
+
+    const voiced = (effectiveVoicing==='drop2') ? toDrop2(close) : close.slice();
+
+    currentNotes = voiced;
+    correctVoicing = effectiveVoicing;
+
+    // Analyse (toujours sur close) pour construire la bonne réponse
+    const a = analyzeChord(close);
+    correctAnswer = `${a.fundamental}${a.chordType}${a.inversion}`;
+
+    // Note repère
+    firstNotePlayed = voiced[Math.floor(Math.random()*4)];
+    questionDiv.textContent = `Note jouée : ${enhText(firstNotePlayed)}`;
+
+    questionStartTime = Date.now();
+    playOneThenChord();
+  }
+
+  /* ============================
+     11) HUD / SCORE / VALIDATION
+     ============================ */
+  let hudTimerId = null;
+
+  function updateHud(){
+    if (config.gametype === 'test') {
+      const qShown = Math.max(0, Math.min(questionIndex+1, config.totalQuestions));
+      progressDiv.textContent = `Question ${qShown}/${config.totalQuestions}`;
+      scoreDiv.textContent    = `Score : ${scoreTotal}`;
+    } else {
+      progressDiv.textContent = 'Entraînement libre';
+      scoreDiv.textContent    = '';
+    }
+    timingDiv.textContent = `Temps: ${ startTime ? ((Date.now()-startTime)/1000).toFixed(1) : '0.0'}s`;
+  }
+
+  function startHudTimer(){
+    stopHudTimer();
+    updateHud();
+    hudTimerId = setInterval(updateHud, 500);
+  }
+  function stopHudTimer(){
+    if (hudTimerId){ clearInterval(hudTimerId); hudTimerId = null; }
+  }
+
+  function getDifficultyMultiplier(cfg){
+    const chordBoost = 1 + 0.10 * Math.max(0, (cfg.allowedChords?.length||1) - 1);
+    const modeBoost  = (cfg.mode==='sequential') ? 1.00 : 1.20;
+    const voicingBoost = (cfg.voicingMode==='both') ? 1.15 : 1.00; // petit bonus si “both”
+    return Math.min(2.20, Number((chordBoost * modeBoost * voicingBoost).toFixed(2)));
+  }
+  function getTimeBonus(s){
+    const t=Math.max(0,s);
+    if (t<=1.5) return 150;
+    if (t<=3)   return 120;
+    if (t<=5)   return 100;
+    if (t<=8)   return 80;
+    if (t<=12)  return 60;
+    if (t<=18)  return 45;
+    if (t<=25)  return 35;
+    if (t<=35)  return 25;
+    if (t<=45)  return 15;
+    return 5;
+  }
+  function computeQuestionPoints(ok, s, cfg){
+    if(!ok) return 0;
+    return Math.round((100 + getTimeBonus(s)) * getDifficultyMultiplier(cfg));
+  }
+  const uiInvToCode = s => s==='Root Position'?'PF':s==='First Inversion'?'R1':s==='Second Inversion'?'R2':'R3';
+
+  function validateAnswer(){
+    if (answeredThisQuestion) return;
+
+    const chord = chordSelect.value;
+    const fund  = fundamentalSelect.value;
+    const invUi = inversionSelect.value;
+    const inv   = uiInvToCode(invUi);
+    const userVoicing = voicingSelect.value; // 'close'|'drop2' (caché si non pertinent)
+
+    const t = (Date.now()-questionStartTime)/1000;
+    const within = (config.gametype === 'test') ? (t <= EXAM_TIME_LIMIT_S) : true;
+
+    const exp = parseAnswer(correctAnswer);
+    const isTypeMatch = (chord === exp.chord) && (inv === exp.inv);
+    const isFundMatch = (fund === exp.fund);
+    const isVoicingMatch = (config.voicingMode==='both' ? (userVoicing === correctVoicing) : true); // si menu impose, voicing auto-OK
+
+    let gained = 0;
+    let examPoints = 0;
+    let feedbackHTML = '';
+
+    answeredThisQuestion = true;
+    submitBtn.disabled = true;
+
+    const orderPlayed = currentNotes.map(enhText).join(' – ');
+
+    if (within && isTypeMatch && isFundMatch && isVoicingMatch) {
+      if (config.gametype === 'test') {
+        gained = computeQuestionPoints(true, t, config);
+        scoreTotal += gained;
+        examPoints = 2;
+        feedbackHTML = `
+          <span style="color:#1f8b24; font-weight:700;">Correct ! ✅</span>
+          <div style="margin-top:6px; font-size:14px;">
+            Base 100 + Bonus temps ${getTimeBonus(t)} (${t.toFixed(1)}s)
+            • Mult. ×${getDifficultyMultiplier(config).toFixed(2)}
+            → <strong>${gained} pts</strong>
+          </div>
+          <div style="margin-top:6px;font-size:14px;opacity:.85;">Voicing : ${correctVoicing} • Notes : ${orderPlayed}</div>`;
+        nextBtn.disabled = true;
+        later(()=>{ nextBtn.disabled=false; advance(); }, 1200);
+      } else {
+        feedbackHTML = `<span style="color:#1f8b24; font-weight:700;">Correct ! ✅</span>
+                        <div style="margin-top:6px;font-size:14px;opacity:.85;">Voicing : ${correctVoicing} • Notes : ${orderPlayed}</div>`;
+      }
+
+    } else if (within && isTypeMatch && isFundMatch && !isVoicingMatch) {
+      // Cette branche ne peut arriver que si voicingMode === 'both'
+      if (config.gametype === 'test') {
+        gained = Math.round(computeQuestionPoints(true, t, config) / 2);
+        scoreTotal += gained;
+        examPoints = 1;
+        feedbackHTML = `
+          <span style="color:#2e7dd7; font-weight:700;">Presque ! ✳️</span>
+          <div style="margin-top:6px; font-size:14px;">
+            Type + renversement + tonique OK, mais voicing incorrect<br>
+            → <strong>${gained} pts</strong> • <strong>+1 pt (examen)</strong><br>
+            Attendu : <strong>${correctAnswer}</strong> (${correctVoicing})
+          </div>
+          <div style="margin-top:6px;font-size:14px;opacity:.85;">Notes : ${orderPlayed}</div>`;
+      } else {
+        feedbackHTML = `
+          <span style="color:#2e7dd7; font-weight:700;">Voicing incorrect</span>
+          <div style="margin-top:6px; font-size:14px;">
+            Attendu : <strong>${correctAnswer}</strong> (${correctVoicing})
+          </div>
+          <div style="margin-top:6px;font-size:14px;opacity:.85;">Notes : ${orderPlayed}</div>`;
+      }
+
+    } else if (!within && config.gametype === 'test') {
+      feedbackHTML = `
+        <span style="color:#c62828;">⏱️ Temps dépassé (&gt; ${EXAM_TIME_LIMIT_S}s) — 0 pt</span>
+        <div style="margin-top:6px;">Bonne réponse : <strong>${correctAnswer}</strong> (${correctVoicing})</div>
+        <div style="margin-top:6px;font-size:14px;opacity:.85;">Notes : ${orderPlayed}</div>`;
+
+    } else {
+      feedbackHTML = `
+        <span style="color:#c62828;">Incorrect ❌ — bonne réponse : <strong>${correctAnswer}</strong> (${correctVoicing})</span>
+        <div class="hint-relisten">Réécoute puis “${config.gametype==='test'?'Question suivante':'Nouvel accord'}”.</div>
+        <div style="margin-top:6px;font-size:14px;opacity:.85;">Notes : ${orderPlayed}</div>`;
+      examPoints = 0;
     }
 
-    function stopAllSounds() {
-        Object.values(preloadedSounds).forEach(audio => {
-            audio.pause();
-            audio.currentTime = 0;
-        });
+    if (config.gametype === 'test' && questionIndex >= 0 && questionIndex < config.totalQuestions) {
+      examPointsByIndex[questionIndex] = examPoints;
+      gamePointsByIndex[questionIndex] = gained;
     }
 
-    function backToMenu() {
-        document.getElementById('game').style.display = 'none';
-        document.getElementById('menu').style.display = 'block';
-        document.getElementById('back-to-menu').style.display = 'none';
-        document.getElementById('restart-test').style.display = 'none';
-        document.getElementById('next-question').style.display = 'none';
-    }
+    validationDiv.innerHTML = feedbackHTML;
+    updateHud();
+  }
 
-    function restartTest() {
-        document.getElementById('game').style.display = 'none';
-        startGame();
-    }
-
-    function endGame() {
-        endTime = new Date();
-        const timeTaken = (endTime - startTime) / 1000;
-        const resultDiv = document.getElementById('result');
-        resultDiv.innerHTML = `
-            <p>Test terminé !</p>
-            <p>Nombre de bonnes réponses : ${correctAnswers} sur ${totalQuestions}</p>
-            <p>Temps écoulé : ${timeTaken.toFixed(2)} secondes</p>
-        `;
-        document.getElementById('back-to-menu').style.display = 'block';
-        document.getElementById('restart-test').style.display = 'block';
-        document.getElementById('next-question').style.display = 'none';
-    }
-
-    function replay() {
-        stopAllSounds();
-        if (!currentNotes || currentNotes.length === 0) {
-            console.error("No notes available to replay.");
-            document.getElementById('question').innerText = "Aucune note à rejouer.";
-            return;
-        }
-        document.getElementById('question').innerText = `Note jouée : ${getEnharmonicEquivalent(firstNotePlayed)}`;
-        playSingleNoteThenTriad(currentNotes, firstNotePlayed);
-    }
-
-    function skipQuestion() {
-        questionCount++;
-        setTimeout(nextQuestion, 2000);
-    }
-
-    function nextQuestion() {
-        document.getElementById('validation-message').textContent = '';
-        if (questionCount < totalQuestions) {
-            document.getElementById('result').textContent = '';
-            generateQuestion();
-        } else {
-            endGame();
-        }
-    }
-
-    function generateQuestion() {
-        const baseNote = getRandomNoteInRange(3, 2);
-        const structure = getRandomTriadStructure();
-        currentNotes = generate4NotesFromStructure(baseNote, structure);
-
-        const analysis = analyze4Sounds(currentNotes);
-        correctAnswer = `${analysis.fundamental}${analysis.triadType}${analysis.inversion}`;
-
-        console.log(`Generated triad: ${currentNotes.join(', ')}`);
-        console.log(`Correct Answer: ${correctAnswer}`);
-
-        firstNotePlayed = currentNotes[Math.floor(Math.random() * 4)];
-        document.getElementById('question').innerText = `Note jouée : ${getEnharmonicEquivalent(firstNotePlayed)}`;
-        
-        playSingleNoteThenTriad(currentNotes, firstNotePlayed);
-        updateOptions();
-    }
-
-    function getRandomTriadStructure() {
-        const weightedStructures = [
-            ...fourSoundsStructures,
-            ...fourSoundsStructures.filter(struct => struct.type.includes('D2')),
-            ...fourSoundsStructures.filter(struct => struct.type.includes('D2'))
-        ];
-        
-        return weightedStructures[Math.floor(Math.random() * weightedStructures.length)];
-    }
-
-    function generate4NotesFromStructure(baseNote, structure) {
-        let noteIndex = noteMap[baseNote.slice(0, -1)];
-        let octave = parseInt(baseNote.slice(-1));
-        let notes = [baseNote];
-        let currentIndex = noteIndex;
-
-        structure.intervals.forEach(interval => {
-            currentIndex = (currentIndex + interval) % 12;
-
-            if (currentIndex < noteIndex) {
-                octave++;
-                if (octave > 5) octave = 5;
-            }
-
-            const nextNoteName = reverseNoteMap[currentIndex];
-            if (nextNoteName !== undefined) {
-                const nextNote = `${nextNoteName}${octave}`;
-                notes.push(nextNote);
-                noteIndex = currentIndex;
-            } else {
-                console.error(`Invalid note index: ${currentIndex}`);
-            }
-        });
-
-        notes.sort((a, b) => {
-            const noteValueA = noteMap[a.slice(0, -1)] + parseInt(a.slice(-1)) * 12;
-            const noteValueB = noteMap[b.slice(0, -1)] + parseInt(b.slice(-1)) * 12;
-            return noteValueA - noteValueB;
-        });
-
-        return notes;
-    }
-
-    function analyze4Sounds(notes) {
-        const [note1, note2, note3, note4] = notes;
-        const interval1 = (noteMap[note2.slice(0, -1)] - noteMap[note1.slice(0, -1)] + 12) % 12;
-        const interval2 = (noteMap[note3.slice(0, -1)] - noteMap[note2.slice(0, -1)] + 12) % 12;
-        const interval3 = (noteMap[note4.slice(0, -1)] - noteMap[note3.slice(0, -1)] + 12) % 12;
-    
-        let triadType = '';
-        let inversion = '';
-        let fundamental = note1.slice(0, -1);
-    
-        // Maj7 PF
-        if (interval1 === 4 && interval2 === 3 && interval3 === 4) {
-            triadType = 'Maj7';
-            inversion = 'PF';
-        }
-        // Min7 PF
-        else if (interval1 === 3 && interval2 === 4 && interval3 === 3) {
-            triadType = 'Min7';
-            inversion = 'PF';
-        }
-        // 7 PF
-        else if (interval1 === 4 && interval2 === 3 && interval3 === 3) {
-            triadType = '7';
-            inversion = 'PF';
-        }
-        // -7b5 PF
-        else if (interval1 === 3 && interval2 === 3 && interval3 === 4) {
-            triadType = '-7b5';
-            inversion = 'PF';
-
-        }
-        // Maj7 R1
-        else if (interval1 === 3 && interval2 === 4 && interval3 === 1) {
-            triadType = 'Maj7';
-            inversion = 'R1';
-            fundamental = note4.slice(0, -1);
-        }
-        // Min7 R1
-        else if (interval1 === 4 && interval2 === 3 && interval3 === 2) {
-            triadType = 'Min7';
-            inversion = 'R1';
-            fundamental = note4.slice(0, -1);
-        }
-         // 7 R1
-         else if (interval1 === 3 && interval2 === 3 && interval3 === 2) {
-            triadType = '7';
-            inversion = 'R1';
-            fundamental = note4.slice(0, -1);   
-
-         }
-         // -7b5 R1
-        else if (interval1 === 3 && interval2 === 4 && interval3 === 2) {
-            triadType = '-7b5';
-            inversion = 'R1';
-            fundamental = note4.slice(0, -1); 
-        }
-        // Maj7 R2
-        else if (interval1 === 4 && interval2 === 1 && interval3 === 4) {
-            triadType = 'Maj7';
-            inversion = 'R2';
-            fundamental = note3.slice(0, -1);
-        }
-        // Min7 R2
-        else if (interval1 === 3 && interval2 === 2 && interval3 === 3) {
-            triadType = 'Min7';
-            inversion = 'R2';
-            fundamental = note3.slice(0, -1);
-        }
-        // 7 R2
-        else if (interval1 === 3 && interval2 === 2 && interval3 === 4) {
-            triadType = '7';
-            inversion = 'R2';
-            fundamental = note3.slice(0, -1);
-        }
-        // -7b5 R2
-        else if (interval1 === 4 && interval2 === 2 && interval3 === 3) {
-            triadType = '-7b5';
-            inversion = 'R2';
-            fundamental = note3.slice(0, -1);
-        }
-        // Maj7 R3
-        else if (interval1 === 1 && interval2 === 4 && interval3 === 3) {
-            triadType = 'Maj7';
-            inversion = 'R3';
-            fundamental = note2.slice(0, -1);
-        }
-        // Min7 R3
-        else if (interval1 === 2 && interval2 === 3 && interval3 === 4) {
-            triadType = 'Min7';
-            inversion = 'R3';
-            fundamental = note2.slice(0, -1);
-        }
-        // 7 R3
-        else if (interval1 === 2 && interval2 === 4 && interval3 === 3) {
-            triadType = '7';
-            inversion = 'R3';
-            fundamental = note2.slice(0, -1);
-
-        }
-        // -7b5 R3
-        else if (interval1 === 2 && interval2 === 3 && interval3 === 3) {
-            triadType = '-7b5';
-            inversion = 'R3';
-            fundamental = note2.slice(0, -1);
-        }
-        // Dim7 PF
-        else if (interval1 === 3 && interval2 === 3 && interval3 === 3) {
-            triadType = 'Dim7';
-            inversion = 'PF';
-        }
-        // Dim7 D2 PF
-        else if (interval1 === 6 && interval2 === 3 && interval3 === 6) {
-            triadType = 'Dim7 D2';
-            inversion = 'PF';
-        }
-        // Maj7 PF D2
-        else if (interval1 === 7 && interval2 === 4 && interval3 === 5) {
-            triadType = 'Maj7 D2';
-            inversion = 'PF';
-        }
-        // Maj7 D2 R1
-        else if (interval1 === 7 && interval2 === 1 && interval3 === 7) {
-            triadType = 'Maj7 D2';
-            inversion = 'R1';
-            fundamental = note3.slice(0, -1);
-        }
-        // Maj7 D2 R2
-        else if (interval1 === 5 && interval2 === 4 && interval3 === 7) {
-            triadType = 'Maj7 D2';
-            inversion = 'R2';
-            fundamental = note3.slice(0, -1);
-        }
-        // Maj7 D2 R3
-        else if (interval1 === 5 && interval2 === 3 && interval3 === 5) {
-            triadType = 'Maj7 D2';
-            inversion = 'R3';
-            fundamental = note4.slice(0, -1);
-        }
-        // Min7 D2 PF
-        else if (interval1 === 7 && interval2 === 3 && interval3 === 5) {
-            triadType = 'Min7 D2';
-            inversion = 'PF';
-        }
-        // Min7 D2 R1
-        else if (interval1 === 7 && interval2 === 2 && interval3 === 7) {
-            triadType = 'Min7 D2';
-            inversion = 'R1';
-            fundamental = note3.slice(0, -1); // Mise à jour pour l’accord D2
-        }
-        // Min7 D2 R2
-        else if (interval1 === 5 && interval2 === 3 && interval3 === 7) {
-            triadType = 'Min7 D2';
-            inversion = 'R2';
-            fundamental = note2.slice(0, -1);
-        }
-        // Min7 D2 R3
-        else if (interval1 === 5 && interval2 === 4 && interval3 === 5) {
-            triadType = 'Min7 D2';
-            inversion = 'R3';
-            fundamental = note4.slice(0, -1);
-        }
-        // 7sus4 PF
-        else if (interval1 === 5 && interval2 === 2 && interval3 === 3) {
-            triadType = '7sus4';
-            inversion = 'PF';
-        }
-        // 7sus4 R1
-        else if (interval1 === 2 && interval2 === 3 && interval3 === 2) {
-            triadType = '7sus4';
-            inversion = 'R1';
-            fundamental = note4.slice(0, -1);
-        }
-        // 7sus4 R2
-        else if (interval1 === 3 && interval2 === 2 && interval3 === 5) {
-            triadType = '7sus4';
-            inversion = 'R2';
-            fundamental = note3.slice(0, -1);
-        }
-        // 7sus4 R3
-        else if (interval1 === 2 && interval2 === 5 && interval3 === 2) {
-            triadType = '7sus4';
-            inversion = 'R3';
-            fundamental = note2.slice(0, -1);
-        }
-        // 7sus4 D2 PF
-        else if (interval1 === 7 && interval2 === 3 && interval3 === 7) {
-            triadType = '7sus4 D2';
-            inversion = 'PF';
-        }
-        // 7sus4 D2 R1
-        else if (interval1 === 5 && interval2 === 2 && interval3 === 7) {
-            triadType = '7sus4 D2';
-            inversion = 'R1';
-            fundamental = note3.slice(0, -1);
-        }
-        // 7sus4 D2 R2
-        else if (interval1 === 5 && interval2 === 5 && interval3 === 5) {
-            triadType = '7sus4 D2';
-            inversion = 'R2';
-            fundamental = note2.slice(0, -1);
-        }
-        // 7sus4 D2 R3
-        else if (interval1 === 7 && interval2 === 2 && interval3 === 5) {
-            triadType = '7sus4 D2';
-            inversion = 'R3';
-            fundamental = note4.slice(0, -1);
-
-        }
-        // 7 D2 PF
-        else if (interval1 === 7 && interval2 === 3 && interval3 === 6) {
-            triadType = '7 D2';
-            inversion = 'PF';
-        }
-         // 7 D2 R1
-            else if (interval1 === 6 && interval2 === 2 && interval3 === 7) {
-                triadType = '7 D2';
-                inversion = 'R1';
-                fundamental = note3.slice(0, -1);
-            }
-        // 7 D2 R2
-        else if (interval1 === 5 && interval2 === 4 && interval3 === 6) {
-            triadType = '7 D2';
-            inversion = 'R2';
-            fundamental = note2.slice(0, -1);
-        }
-        // 7 D2 R3
-        else if (interval1 === 6 && interval2 === 3 && interval3 === 5) {
-            triadType = '7 D2';
-            inversion = 'R3';
-            fundamental = note4.slice(0, -1);
-
-        }
-        // -7b5 D2 PF
-        else if (interval1 === 6 && interval2 === 4 && interval3 === 5) {
-            triadType = '-7b5 D2';
-            inversion = 'PF';
-        }
-         // -7b5 D2 R1
-            else if (interval1 === 7 && interval2 === 2 && interval3 === 6) {
-                triadType = '-7b5 D2';
-                inversion = 'R1';
-                fundamental = note3.slice(0, -1);
-            }
-        // -7b5 D2 R2
-        else if (interval1 === 6 && interval2 === 3 && interval3 === 7) {
-            triadType = '-7b5 D2';
-            inversion = 'R2';
-            fundamental = note2.slice(0, -1);
-        }
-        // -7b5 D2 R3
-        else if (interval1 === 5 && interval2 === 3 && interval3 === 6) {
-            triadType = '-7b5 D2';
-            inversion = 'R3';
-            fundamental = note4.slice(0, -1);
-
-        }
-        // TBN1 D2 F
-        else if (interval1 === 6 && interval2 === 3 && interval3 === 5) {
-            triadType = 'TBN 1 D2';
-            inversion = 'R3';
-            fundamental = note4.slice(0, -1);
-         
-        } else {
-            console.error("Aucune correspondance trouvée pour l'accord analysé.");
-        }
-    
-        return { triadType, inversion, fundamental };
-    }
-     
-
-    function getRandomNoteInRange(octaveRange, startOctave = 2) {
-        const randomOctave = Math.floor(Math.random() * octaveRange) + startOctave;
-        const randomNote = Object.keys(noteMap)[Math.floor(Math.random() * Object.keys(noteMap).length)];
-        return `${randomNote}${randomOctave}`;
-    }
-
-    function getEnharmonicEquivalent(note) {
-        const noteName = note.slice(0, -1);
-        const octave = note.slice(-1);
-        const enharmonic = enharmonicMap[noteName];
-        return enharmonic ? `${noteName}/${enharmonic}${octave}` : note;
-    }
-
-    function playSingleNoteThenTriad(notesArray, firstNote) {
-        if (!preloadedSounds[firstNote]) {
-            console.error(`Audio not preloaded for note: ${firstNote}`);
-            document.getElementById('question').innerText = `Erreur: Le son de ${firstNote} n'a pas pu être chargé.`;
-            return;
-        }
-
-        preloadedSounds[firstNote].play().then(() => {
-            setTimeout(() => {
-                stopAllSounds();
-                notesArray.forEach(note => {
-                    if (preloadedSounds[note]) {
-                        preloadedSounds[note].currentTime = 0;
-                        preloadedSounds[note].play().catch(error => console.error('Error playing audio:', error));
-                    } else {
-                        console.error(`Audio not preloaded for note: ${note}`);
-                    }
-                });
-                setTimeout(stopAllSounds, 8000);
-            }, 4000);
-        }).catch(error => console.error('Error playing audio:', error));
-    }
-
-    function updateOptions() {
-        const optionsDiv = document.getElementById('options');
-        optionsDiv.innerHTML = '';
-
-        const triadSelect = document.createElement('select');
-        triadSelect.id = 'triad-select';
-        triads.forEach(triad => {
-            const option = document.createElement('option');
-            option.value = triad.label;
-            option.textContent = triad.label;
-            triadSelect.appendChild(option);
-        });
-
-        const inversionSelect = document.createElement('select');
-        inversionSelect.id = 'inversion-select';
-        inversions.forEach(inversion => {
-            const option = document.createElement('option');
-            option.value = inversion;
-            option.textContent = inversion;
-            inversionSelect.appendChild(option);
-        });
-
-        const fundamentalSelect = document.createElement('select');
-        fundamentalSelect.id = 'fundamental-select';
-        Object.keys(noteMap).forEach(note => {
-            const option = document.createElement('option');
-            const enharmonic = enharmonicMap[note];
-            option.value = note;
-            option.textContent = enharmonic ? `${note}/${enharmonic}` : note;
-            fundamentalSelect.appendChild(option);
-        });
-
-        const submitButton = document.createElement('button');
-        submitButton.textContent = 'Submit';
-        submitButton.style.backgroundColor = 'green';
-        submitButton.style.color = 'white';
-        submitButton.addEventListener('click', () => {
-            const selectedTriad = triadSelect.value;
-            const selectedInversion = inversionSelect.value;
-            const selectedFundamental = fundamentalSelect.value;
-            const selectedAnswer = `${selectedFundamental}${selectedTriad}${getInversionLabel(selectedInversion)}`;
-
-            const validationMessage = document.getElementById('validation-message');
-            if (selectedAnswer === correctAnswer) {
-                validationMessage.textContent = 'Correcte !';
-                validationMessage.style.color = 'green';
-                correctAnswers++;
-            } else {
-                validationMessage.textContent = `Incorrect, la bonne réponse était ${correctAnswer}.`;
-                validationMessage.style.color = 'red';
-            }
-            questionCount++;
-            setTimeout(nextQuestion, 2000);
-        });
-
-        const replayButton = document.createElement('button');
-        replayButton.textContent = 'Replay';
-        replayButton.style.backgroundColor = 'yellow';
-        replayButton.style.color = 'black';
-        replayButton.addEventListener('click', replay);
-
-        optionsDiv.appendChild(triadSelect);
-        optionsDiv.appendChild(inversionSelect);
-        optionsDiv.appendChild(fundamentalSelect);
-        optionsDiv.appendChild(submitButton);
-        optionsDiv.appendChild(replayButton);
-
-        triadSelect.addEventListener('change', () => {
-            inversionSelect.style.display = triadSelect.value.includes('Dim7') ? 'none' : 'block';
-        });
-        triadSelect.dispatchEvent(new Event('change'));
-    }
-
-    function getInversionLabel(inversion) {
-        switch (inversion) {
-            case 'Root Position':
-                return 'PF';
-            case 'First Inversion':
-                return 'R1';
-            case 'Second Inversion':
-                return 'R2';
-            case 'Third Inversion':
-                return 'R3';
-            default:
-                return '';
-        }
-    }
+  /* ============================
+     12) HUD TIMER (unique)
+     ============================ */
+  function startHudTimer(){
+    stopHudTimer();
+    updateHud();
+    hudTimerId = setInterval(updateHud, 500);
+  }
+  function stopHudTimer(){
+    if (hudTimerId){ clearInterval(hudTimerId); hudTimerId = null; }
+  }
 });

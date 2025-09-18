@@ -1,32 +1,106 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <title>Advanced 4 Sounds</title>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ear Training — Année 3</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Grille stable des sélecteurs de réponse */
+    .chord-selects{display:grid;grid-template-columns:1fr;gap:14px;}
+    @media (min-width:680px){.chord-selects{grid-template-columns:repeat(4,1fr);} }
+  </style>
 </head>
 <body>
-    <div id="logo-container">
-        <img id="logo" src="logo.png" alt="Logo">
+  <!-- En-tête -->
+  <header class="menu-hdr">
+    <div>
+      <h1>Ear Training — Accords à 4 sons</h1>
+      <p class="subtitle">Tétrades, renversements et voicings</p>
     </div>
-    <div id="menu">
-        <h1>4 Sounds Recognition App v2</h1> <!-- Ajout du titre principal de l'application -->
-        <button id="start-game">Commencer le jeu</button>
+    <img src="logo.png" alt="ASMM" class="hdr-logo" />
+  </header>
+
+  <!-- MENU -->
+  <main id="menu">
+    <div class="card">
+      <h2>Type de jeu</h2>
+      <label><input type="radio" name="gametype" value="training" checked> Entraînement</label>
+      <label style="margin-left:14px;"><input type="radio" name="gametype" value="test"> Test (10 questions)</label>
     </div>
-    <div id="game" style="display: none;">
-        <div id="question"></div>
-        <div id="validation-message" style="color: green; font-weight: bold;"></div> <!-- Ajouté pour les messages de validation -->
-        <div id="result"></div>
-        <div id="options"></div>
-        <div id="buttons" class="buttons-bottom">
-            <button id="next-question">Next Question</button>
-            <button id="back-to-menu">Menu</button>
-            <button id="restart-test">Restart test</button>
-        </div>
+
+    <div class="card">
+      <h2>Mode d’écoute</h2>
+      <label><input type="radio" name="mode" value="sequential" checked> Séparé</label>
+      <label style="margin-left:14px;"><input type="radio" name="mode" value="simultaneous"> Simultané</label>
     </div>
-    <footer>
-        <p>&copy; Guillaume Estace</p>
-    </footer>
-    <script src="script.js"></script>
+
+    <div class="card">
+      <h2>Voicing</h2>
+      <label><input type="radio" name="voicingMode" value="close" checked> Close</label>
+      <label style="margin-left:14px;"><input type="radio" name="voicingMode" value="drop2"> Drop 2</label>
+      <label style="margin-left:14px;"><input type="radio" name="voicingMode" value="both"> Close + Drop 2</label>
+    </div>
+
+    <div class="card" id="chord-picker">
+      <h2>Familles d'accords incluses</h2>
+      <div id="chord-checks">
+        <label><input type="checkbox" value="Maj7"  checked> Maj7</label>
+        <label><input type="checkbox" value="Min7"  checked> Min7</label>
+        <label><input type="checkbox" value="7sus4" checked> 7sus4</label>
+        <label><input type="checkbox" value="7"     checked> 7 (dominante)</label>
+        <label><input type="checkbox" value="-7b5"  checked> Min7♭5</label>
+      </div>
+      <div class="buttons-bottom" style="justify-content:flex-start">
+        <button id="select-all-chords" class="ctrl-btn white" type="button">Tout sélectionner</button>
+        <button id="deselect-all-chords" class="ctrl-btn white" type="button">Tout désélectionner</button>
+        <span id="selected-count" style="align-self:center;margin-left:8px;"></span>
+      </div>
+      <p id="chord-warning" style="color:#d71e14;display:none;margin:6px 0 0;">⚠️ Sélectionnez au moins une famille.</p>
+    </div>
+
+    <button id="start-game" class="validate-btn" style="max-width:960px;" type="button">Commencer</button>
+  </main>
+
+  <!-- JEU -->
+  <main id="game" style="display:none;">
+    <div class="hud">
+      <div class="hud-left">
+        <div id="progress">Question 0/10</div>
+        <div id="score">Score : 0</div>
+      </div>
+      <div id="timing">Temps: 0.0s</div>
+    </div>
+
+    <div id="question" class="card"></div>
+
+    <!-- Sélecteurs de réponse -->
+    <div class="card chord-selects">
+      <select id="voicing-select">
+        <option value="close">Close</option>
+        <option value="drop2">Drop 2</option>
+      </select>
+      <select id="chord-select"></select>
+      <select id="inversion-select"></select>
+      <select id="fundamental-select"></select>
+    </div>
+
+    <button id="submit-answer" class="validate-btn" type="button">Valider</button>
+
+    <div id="validation-message" class="feedback"></div>
+    <div id="result"></div>
+
+    <div class="buttons-bottom">
+      <button id="replay-single-and-chord" class="ctrl-btn" type="button">Réécouter (note + accord)</button>
+      <button id="replay-chord-only" class="ctrl-btn" type="button">Réécouter (accord seul)</button>
+      <button id="next-question" class="ctrl-btn" type="button">Question suivante</button>
+      <button id="restart-test" class="ctrl-btn" type="button">Recommencer le test</button>
+      <button id="back-to-menu" class="ctrl-btn white" style="width:100%;" type="button">Menu</button>
+    </div>
+  </main>
+
+  <footer class="app-footer">© 2025 — Guillaume Estace / ASMM V3</footer>
+
+  <script src="script.js"></script>
 </body>
 </html>

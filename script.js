@@ -56,8 +56,8 @@ document.addEventListener('DOMContentLoaded', () => {
         chordWarning=$('chord-warning'), selectAllBtnChords=$('select-all-chords'),
         deselectAllBtnChords=$('deselect-all-chords'), selectedCountEl=$('selected-count');
 
-  const getGametype = () => document.querySelector('[name="gametype"]:checked')?.value || 'training';
-  const getMode     = () => document.querySelector('[name="mode"]:checked')?.value || 'sequential';
+  const getGametype    = () => document.querySelector('[name="gametype"]:checked')?.value || 'training';
+  const getMode        = () => document.querySelector('[name="mode"]:checked')?.value || 'sequential';
   const getVoicingMode = () => document.querySelector('[name="voicingMode"]:checked')?.value || 'close';
 
   // Notes & noms
@@ -69,7 +69,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return enharm[name] ? `${name}/${enharm[name]}${o}` : n;
   };
 
-  const ALL_CHORDS = ['Maj7','Min7','7sus4','7','-7b5'];
+  // ➕ Ajout Dim7 + TBN1
+  const ALL_CHORDS = ['Maj7','Min7','7sus4','7','-7b5','Dim7','TBN1'];
   const INVERSIONS = ['Root Position','First Inversion','Second Inversion','Third Inversion'];
 
   /* ============================
@@ -82,24 +83,31 @@ document.addEventListener('DOMContentLoaded', () => {
     { type:'7sus4', intervals:[5,2,3], inversion:'PF' },
     { type:'7',     intervals:[4,3,3], inversion:'PF' },
     { type:'-7b5',  intervals:[3,3,4], inversion:'PF' },
+    { type:'Dim7',  intervals:[3,3,3], inversion:'PF' }, // Dim7 : une seule position (pas de renversements)
+
     // R1
     { type:'Maj7',  intervals:[3,4,1], inversion:'R1' },
     { type:'Min7',  intervals:[4,3,2], inversion:'R1' },
     { type:'7sus4', intervals:[2,3,2], inversion:'R1' },
     { type:'7',     intervals:[3,3,2], inversion:'R1' },
     { type:'-7b5',  intervals:[3,4,2], inversion:'R1' },
+
     // R2
     { type:'Maj7',  intervals:[4,1,4], inversion:'R2' },
     { type:'Min7',  intervals:[3,2,3], inversion:'R2' },
     { type:'7sus4', intervals:[3,2,5], inversion:'R2' },
     { type:'7',     intervals:[3,2,4], inversion:'R2' },
     { type:'-7b5',  intervals:[4,2,3], inversion:'R2' },
+
     // R3
     { type:'Maj7',  intervals:[1,4,3], inversion:'R3' },
     { type:'Min7',  intervals:[2,3,4], inversion:'R3' },
     { type:'7sus4', intervals:[2,5,2], inversion:'R3' },
     { type:'7',     intervals:[2,4,3], inversion:'R3' },
     { type:'-7b5',  intervals:[2,3,3], inversion:'R3' },
+
+    // Marqueur TBN1 (géré à part, pas via analyzeChord)
+    { type:'TBN1', intervals:[0,0,0], inversion:'PF' },
   ];
 
   /* ============================
@@ -110,30 +118,73 @@ document.addEventListener('DOMContentLoaded', () => {
     Object.keys(noteMap).forEach(n=>notes[`${n}${o}`]=`audio/${n}${o}.mp3`);
   }
   const audioCache={}, activeAudios=new Set(), pendingTimers=new Set();
-  function later(cb,ms){const id=setTimeout(()=>{pendingTimers.delete(id);try{cb();}catch{}},ms);pendingTimers.add(id);return id;}
-  function clearAllTimers(){pendingTimers.forEach(id=>clearTimeout(id));pendingTimers.clear();}
+  function later(cb,ms){
+    const id=setTimeout(()=>{
+      pendingTimers.delete(id);
+      try{cb();}catch{}
+    },ms);
+    pendingTimers.add(id);
+    return id;
+  }
+  function clearAllTimers(){
+    pendingTimers.forEach(id=>clearTimeout(id));
+    pendingTimers.clear();
+  }
   function getAudioSafe(noteKey){
-    if(!audioCache[noteKey]){ const a=new Audio(notes[noteKey]); a.preload='auto'; audioCache[noteKey]=a; }
-    const clone=new Audio(audioCache[noteKey].src); clone.preload='auto'; return clone;
+    if(!audioCache[noteKey]){
+      const a=new Audio(notes[noteKey]);
+      a.preload='auto';
+      audioCache[noteKey]=a;
+    }
+    const clone=new Audio(audioCache[noteKey].src);
+    clone.preload='auto';
+    return clone;
   }
   function stopWithFade(audio, fadeMs=220){
     try{
-      const steps=8, stepDur=Math.max(10,Math.floor(fadeMs/steps)); let i=0, startVol=audio.volume;
-      const iv=setInterval(()=>{ i++; audio.volume=startVol*Math.max(0,1-i/steps);
-        if(i>=steps){ clearInterval(iv); try{audio.pause();audio.currentTime=0;}catch{} audio.volume=startVol; activeAudios.delete(audio); }
+      const steps=8, stepDur=Math.max(10,Math.floor(fadeMs/steps));
+      let i=0, startVol=audio.volume;
+      const iv=setInterval(()=>{
+        i++;
+        audio.volume=startVol*Math.max(0,1-i/steps);
+        if(i>=steps){
+          clearInterval(iv);
+          try{audio.pause();audio.currentTime=0;}catch{}
+          audio.volume=startVol;
+          activeAudios.delete(audio);
+        }
       }, stepDur);
     }catch{}
   }
-  function stopAllAudioNow(){ try{ activeAudios.forEach(a=>{try{a.pause();a.currentTime=0;}catch{}}); activeAudios.clear(); clearAllTimers(); }catch{} }
+  function stopAllAudioNow(){
+    try{
+      activeAudios.forEach(a=>{try{a.pause();a.currentTime=0;}catch{}});
+      activeAudios.clear();
+      clearAllTimers();
+    }catch{}
+  }
   function playNote(noteKey,{volume=1,startDelayMs=0,maxDurMs=1200,fadeOutMs=0}={}){
     const a=getAudioSafe(noteKey); a.volume=volume; activeAudios.add(a);
     later(()=>{try{a.currentTime=0; a.play().catch(()=>{});}catch{}}, Math.max(0,startDelayMs));
-    if(maxDurMs>0){ later(()=>{ fadeOutMs>0?stopWithFade(a,fadeOutMs):(a.pause(),a.currentTime=0,activeAudios.delete(a)); }, startDelayMs+maxDurMs); }
+    if(maxDurMs>0){
+      later(()=>{
+        if(fadeOutMs>0) stopWithFade(a,fadeOutMs);
+        else{
+          try{a.pause();a.currentTime=0;}catch{}
+          activeAudios.delete(a);
+        }
+      }, startDelayMs+maxDurMs);
+    }
   }
   function playChordArray(arr){
     if(getMode()==='sequential'){
       const gap=Math.max(400,AUDIOCFG.seq_gap), lastH=AUDIOCFG.seq_last_hold;
-      arr.forEach((n,i)=>{ const start=i*gap, last=i===arr.length-1, hold= last?lastH:(gap+AUDIOCFG.seq_extra_hold), fade= last?AUDIOCFG.seq_last_fade:AUDIOCFG.seq_note_fade; playNote(n,{volume:1,startDelayMs:start,maxDurMs:hold,fadeOutMs:fade}); });
+      arr.forEach((n,i)=>{
+        const start=i*gap, last=i===arr.length-1;
+        const hold= last?lastH:(gap+AUDIOCFG.seq_extra_hold);
+        const fade= last?AUDIOCFG.seq_last_fade:AUDIOCFG.seq_note_fade;
+        playNote(n,{volume:1,startDelayMs:start,maxDurMs:hold,fadeOutMs:fade});
+      });
     }else{
       const hold=AUDIOCFG.simult_hold;
       arr.forEach(n=>playNote(n,{volume:AUDIOCFG.simult_volume,startDelayMs:0,maxDurMs:hold,fadeOutMs:AUDIOCFG.simult_fade}));
@@ -188,7 +239,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     arr.sort(byMidi);
     const low=splitNote(arr[0]).oct, maxOct=low+1;
-    for(let i=1;i<arr.length;i++){ const s=splitNote(arr[i]); if(s.oct>maxOct) arr[i]=makeNote(s.idx,maxOct); }
+    for(let i=1;i<arr.length;i++){
+      const s=splitNote(arr[i]);
+      if(s.oct>maxOct) arr[i]=makeNote(s.idx,maxOct);
+    }
     const top=splitNote(arr[arr.length-1]);
     if(top.oct>MAX_TOP_OCT) arr[arr.length-1]=makeNote(top.idx,MAX_TOP_OCT);
     return arr.sort(byMidi);
@@ -213,16 +267,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const found=chordStructuresMaster.find(s=>s.intervals[0]===i1 && s.intervals[1]===i2 && s.intervals[2]===i3);
     if(!found) return { chordType:'', inversion:'', fundamental:'' };
     let fundamental=n1.slice(0,-1);
-    if(found.inversion==='R1') fundamental=n4.slice(0,-1);
+    if(found.inversion==='R1')      fundamental=n4.slice(0,-1);
     else if(found.inversion==='R2') fundamental=n3.slice(0,-1);
     else if(found.inversion==='R3') fundamental=n2.slice(0,-1);
     return { chordType:found.type, inversion:found.inversion, fundamental };
   }
 
   function parseAnswer(str){
-    const invs=['PF','R1','R2','R3']; const inv=invs.find(s=>str.endsWith(s))||'PF';
-    const body=str.slice(0,-inv.length); const types=ALL_CHORDS.slice();
-    let chord='', tonic=''; for(const t of types){ if(body.endsWith(t)){ chord=t; tonic=body.slice(0, body.length-t.length); break; } }
+    const invs=['PF','R1','R2','R3'];
+    const inv=invs.find(s=>str.endsWith(s))||'PF';
+    const body=str.slice(0,-inv.length);
+    const types=ALL_CHORDS.slice();
+    let chord='', tonic='';
+    for(const t of types){
+      if(body.endsWith(t)){
+        chord=t;
+        tonic=body.slice(0, body.length-t.length);
+        break;
+      }
+    }
     return { fund:tonic, chord, inv };
   }
 
@@ -233,25 +296,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const n=chordChecksWrap.querySelectorAll('input[type="checkbox"]:checked').length;
     selectedCountEl.textContent=`${n} sélectionnée${n>1?'s':''}`;
   }
-  chordChecksWrap.addEventListener('change',()=>{applySettings(); updateSelectedCount();});
-  selectAllBtnChords.onclick=()=>{chordChecksWrap.querySelectorAll('input').forEach(c=>c.checked=true); applySettings(); updateSelectedCount();};
-  deselectAllBtnChords.onclick=()=>{chordChecksWrap.querySelectorAll('input').forEach(c=>c.checked=false); applySettings(); updateSelectedCount();};
+  chordChecksWrap.addEventListener('change',()=>{
+    applySettings();
+    updateSelectedCount();
+  });
+  selectAllBtnChords.onclick=()=>{
+    chordChecksWrap.querySelectorAll('input').forEach(c=>c.checked=true);
+    applySettings();
+    updateSelectedCount();
+  };
+  deselectAllBtnChords.onclick=()=>{
+    chordChecksWrap.querySelectorAll('input').forEach(c=>c.checked=false);
+    applySettings();
+    updateSelectedCount();
+  };
   updateSelectedCount();
 
   /* ============================
      7) RÉGLAGES & AFFICHAGES
      ============================ */
   function applySettings(){
-    config.gametype = getGametype();
-    config.mode     = getMode();
+    config.gametype    = getGametype();
+    config.mode        = getMode();
     config.voicingMode = getVoicingMode();
 
     const checked = Array.from(chordChecksWrap.querySelectorAll('input:checked')).map(c=>c.value);
     config.allowedChords = checked;
     chordWarning.style.display = checked.length ? 'none' : 'block';
 
-    const base = (config.gametype==='training') ? AUDIOCFG.timings.training :
-                 (config.mode==='sequential' ? AUDIOCFG.timings.sequential : AUDIOCFG.timings.test);
+    const base = (config.gametype==='training')
+      ? AUDIOCFG.timings.training
+      : (config.mode==='sequential' ? AUDIOCFG.timings.sequential : AUDIOCFG.timings.test);
+
     config.preDelayMs = base.preDelayMs;
     config.playbackMs = base.playbackMs;
     config.noteGapMs  = base.noteGapMs || 0;
@@ -266,10 +342,42 @@ document.addEventListener('DOMContentLoaded', () => {
   applySettings();
 
   /* ============================
+     7b) VISIBILITÉ SELECTS (Dim7 / TBN1)
+     ============================ */
+     function updateSelectVisibility(){
+      const chord = chordSelect.value;
+    
+      // 1) RENVERSEMENTS
+      // Dim7 et TBN1 : pas de renversements
+      if (chord === 'Dim7' || chord === 'TBN1') {
+        inversionSelect.style.display = 'none';
+      } else {
+        inversionSelect.style.display = '';
+      }
+    
+      // 2) VOICING (Close / Drop 2)
+      // TBN1 seulement : pas de choix de voicing
+      if (chord === 'TBN1') {
+        voicingSelect.style.display = 'none';
+      } else {
+        // Pour TOUS les autres accords (y compris Dim7) :
+        // - si voicingMode === 'both' → on montre le select
+        // - sinon → on le cache (comme avant)
+        if (config.voicingMode === 'both') {
+          voicingSelect.style.display = '';
+        } else {
+          voicingSelect.style.display = 'none';
+        }
+      }
+    }
+
+  chordSelect.addEventListener('change', updateSelectVisibility);
+
+  /* ============================
      8) LANCEMENT / NAV
      ============================ */
-  startBtn.onclick = startGame;
-  backBtn.onclick  = ()=>backToMenu();
+  startBtn.onclick   = startGame;
+  backBtn.onclick    = ()=>backToMenu();
   restartBtn.onclick = startGame;
 
   nextBtn.onclick = () => {
@@ -291,7 +399,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function startGame(){
     applySettings();
-    if (!config.allowedChords.length){ chordWarning.style.display='block'; return; }
+    if (!config.allowedChords.length){
+      chordWarning.style.display='block';
+      return;
+    }
 
     menu.style.display='none';
     game.style.display='block';
@@ -331,7 +442,10 @@ document.addEventListener('DOMContentLoaded', () => {
      ============================ */
   function advance(){
     questionIndex += 1;
-    if (questionIndex >= config.totalQuestions) { endGame(); return; }
+    if (questionIndex >= config.totalQuestions) {
+      endGame();
+      return;
+    }
     nextQuestionCommon();
   }
 
@@ -458,7 +572,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const SCORE_KEY = 'tetradScores';
-  function loadScores(){ try{ return JSON.parse(localStorage.getItem(SCORE_KEY)||'[]'); }catch(_){ return []; } }
+  function loadScores(){
+    try{ return JSON.parse(localStorage.getItem(SCORE_KEY)||'[]'); }
+    catch(_){ return []; }
+  }
   function saveScore(entry){
     const all=loadScores();
     all.push({
@@ -493,13 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fundamentalSelect.selectedIndex = 0;
     voicingSelect.value = (config.voicingMode==='drop2'?'drop2':'close');
 
-    // Patch UX : afficher le select voicing seulement en mode "Both"
-    if (config.voicingMode === 'both') {
-      voicingSelect.style.display = '';
-    } else {
-      voicingSelect.style.display = 'none';
-    }
-
+    updateSelectVisibility();
     updateHud();
     generateQuestion();
   }
@@ -516,13 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fundamentalSelect.selectedIndex = 0;
     voicingSelect.value = (config.voicingMode==='drop2'?'drop2':'close');
 
-    // Patch UX : afficher le select voicing seulement en mode "Both"
-    if (config.voicingMode === 'both') {
-      voicingSelect.style.display = '';
-    } else {
-      voicingSelect.style.display = 'none';
-    }
-
+    updateSelectVisibility();
     progressDiv.textContent = 'Entraînement libre';
     scoreDiv.textContent = '';
 
@@ -533,21 +638,35 @@ document.addEventListener('DOMContentLoaded', () => {
     // familles
     chordSelect.innerHTML = '';
     (config.allowedChords.length?config.allowedChords:ALL_CHORDS).forEach(t=>{
-      const o=document.createElement('option'); o.value=t; o.textContent=t; chordSelect.appendChild(o);
+      const o=document.createElement('option');
+      o.value=t;
+      o.textContent=t;
+      chordSelect.appendChild(o);
     });
 
     // inversions
     inversionSelect.innerHTML = '';
-    INVERSIONS.forEach(inv=>{ const o=document.createElement('option'); o.value=inv; o.textContent=inv; inversionSelect.appendChild(o); });
+    INVERSIONS.forEach(inv=>{
+      const o=document.createElement('option');
+      o.value=inv;
+      o.textContent=inv;
+      inversionSelect.appendChild(o);
+    });
 
     // fondamentales
     fundamentalSelect.innerHTML = '';
     Object.keys(noteMap).forEach(n=>{
-      const o=document.createElement('option'); const e=enharm[n]; o.value=n; o.textContent = e?`${n}/${e}`:n; fundamentalSelect.appendChild(o);
+      const o=document.createElement('option');
+      const e=enharm[n];
+      o.value=n;
+      o.textContent = e?`${n}/${e}`:n;
+      fundamentalSelect.appendChild(o);
     });
 
     // voicing (sélecteur de réponse)
     voicingSelect.value=(config.voicingMode==='drop2'?'drop2':'close');
+
+    updateSelectVisibility();
   }
 
   function getRefAndChordDelay() {
@@ -569,22 +688,82 @@ document.addEventListener('DOMContentLoaded', () => {
     later(() => { playChordArray(currentNotes); }, delay);
   }
 
-
+  /* ============================
+     10b) GÉNÉRATION DES QUESTIONS
+     ============================ */
   function generateQuestion(){
     const structure = getRandom(chordPool);
     const baseNote  = getRandomBaseNote();
 
-    // 1) on génère TOUJOURS le voicing serré (close)
+    // ----- CAS TBN1 (type C basse de D) -----
+    if (structure.type === 'TBN1') {
+      // Fondamentale de la triade (celle que l’élève doit trouver)
+      const triadFundName = getRandom(Object.keys(noteMap));
+      const triadFundIdx  = noteMap[triadFundName];
+
+      // Basse : un ton en dessous (C basse de D, etc.)
+      // Basse : la 9e de la triade (un ton au-dessus)
+     const bassIdx = (triadFundIdx + 2) % 12;   // +2 = 9e
+
+      const bassOct = AUDIO_MIN_OCT;
+      const bassNote = makeNote(bassIdx, bassOct);
+
+      // Triade majeure au-dessus de la basse
+      const rootOct = bassOct + 1;
+      const root    = makeNote(triadFundIdx, rootOct);
+
+      let thirdIdx  = (triadFundIdx+4)%12;
+      let thirdOct  = rootOct;
+      if (thirdIdx < triadFundIdx) thirdOct++;
+      const third   = makeNote(thirdIdx, thirdOct);
+
+      let fifthIdx  = (thirdIdx+3)%12;
+      let fifthOct  = thirdOct;
+      if (fifthIdx < thirdIdx) fifthOct++;
+      const fifth   = makeNote(fifthIdx, fifthOct);
+
+      let triad = [root, third, fifth].sort(byMidi);
+
+      // Renversement interne aléatoire de la triade (0, 1 ou 2 rotations)
+      const rotations = Math.floor(Math.random()*3);
+      for(let i=0;i<rotations;i++){
+        const n = triad.shift();
+        const s = splitNote(n);
+        triad.push(makeNote(s.idx, s.oct+1));
+        triad.sort(byMidi);
+      }
+
+      let notes = [bassNote, ...triad].sort(byMidi);
+
+      // Limiter la note la plus aiguë
+      const top = splitNote(notes[notes.length-1]);
+      if (top.oct > MAX_TOP_OCT){
+        notes[notes.length-1] = makeNote(top.idx, MAX_TOP_OCT);
+      }
+
+      currentNotes   = notes;
+      correctVoicing = 'close'; // pas de Drop 2 pour TBN1
+      correctAnswer  = `${triadFundName}TBN1PF`;
+
+      firstNotePlayed = notes[Math.floor(Math.random()*notes.length)];
+      questionDiv.textContent = `Note jouée : ${enhText(firstNotePlayed)}`;
+
+      questionStartTime = Date.now();
+      playOneThenChord();
+      return;
+    }
+
+    // ----- CAS STANDARD (Maj7, Min7, 7sus4, 7, -7b5, Dim7) -----
     const close = buildClose(baseNote, structure);
 
-    // 2) choisir voicing effectif selon config
+    // choisir voicing effectif selon config
     let effectiveVoicing = 'close';
-    if (config.voicingMode === 'drop2') effectiveVoicing = 'drop2';
-    else if (config.voicingMode === 'both') effectiveVoicing = (Math.random()<0.5?'close':'drop2');
+    if (config.voicingMode === 'drop2')       effectiveVoicing = 'drop2';
+    else if (config.voicingMode === 'both')   effectiveVoicing = (Math.random()<0.5?'close':'drop2');
 
     const voiced = (effectiveVoicing==='drop2') ? toDrop2(close) : close.slice();
 
-    currentNotes = voiced;
+    currentNotes   = voiced;
     correctVoicing = effectiveVoicing;
 
     // Analyse (toujours sur close) pour construire la bonne réponse
@@ -616,19 +795,10 @@ document.addEventListener('DOMContentLoaded', () => {
     timingDiv.textContent = `Temps: ${ startTime ? ((Date.now()-startTime)/1000).toFixed(1) : '0.0'}s`;
   }
 
-  function startHudTimer(){
-    stopHudTimer();
-    updateHud();
-    hudTimerId = setInterval(updateHud, 500);
-  }
-  function stopHudTimer(){
-    if (hudTimerId){ clearInterval(hudTimerId); hudTimerId = null; }
-  }
-
   function getDifficultyMultiplier(cfg){
-    const chordBoost = 1 + 0.10 * Math.max(0, (cfg.allowedChords?.length||1) - 1);
-    const modeBoost  = (cfg.mode==='sequential') ? 1.00 : 1.20;
-    const voicingBoost = (cfg.voicingMode==='both') ? 1.15 : 1.00; // petit bonus si “both”
+    const chordBoost    = 1 + 0.10 * Math.max(0, (cfg.allowedChords?.length||1) - 1);
+    const modeBoost     = (cfg.mode==='sequential') ? 1.00 : 1.20;
+    const voicingBoost  = (cfg.voicingMode==='both') ? 1.15 : 1.00;
     return Math.min(2.20, Number((chordBoost * modeBoost * voicingBoost).toFixed(2)));
   }
   function getTimeBonus(s){
@@ -648,7 +818,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if(!ok) return 0;
     return Math.round((100 + getTimeBonus(s)) * getDifficultyMultiplier(cfg));
   }
-  const uiInvToCode = s => s==='Root Position'?'PF':s==='First Inversion'?'R1':s==='Second Inversion'?'R2':'R3';
+  const uiInvToCode = s => s==='Root Position'?'PF'
+                          : s==='First Inversion'?'R1'
+                          : s==='Second Inversion'?'R2'
+                          : 'R3';
 
   function validateAnswer(){
     if (answeredThisQuestion) return;
@@ -657,22 +830,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const fund  = fundamentalSelect.value;
     const invUi = inversionSelect.value;
     const inv   = uiInvToCode(invUi);
-    const userVoicing = voicingSelect.value; // 'close'|'drop2' (caché si non pertinent)
+    const userVoicing = voicingSelect.value; // 'close'|'drop2'
 
     const t = (Date.now()-questionStartTime)/1000;
     const within = (config.gametype === 'test') ? (t <= EXAM_TIME_LIMIT_S) : true;
 
     const exp = parseAnswer(correctAnswer);
-    const isTypeMatch = (chord === exp.chord) && (inv === exp.inv);
-    const isFundMatch = (fund === exp.fund);
-    const isVoicingMatch = (config.voicingMode==='both' ? (userVoicing === correctVoicing) : true); // si menu impose, voicing auto-OK
+
+    let isTypeMatch, isFundMatch, isVoicingMatch;
+
+    if (exp.chord === 'TBN1') {
+      // TBN1 : pas de renversement ni de voicing à vérifier
+      isTypeMatch    = (chord === exp.chord);
+      isFundMatch    = (fund === exp.fund);
+      isVoicingMatch = true;
+    } else {
+      isTypeMatch    = (chord === exp.chord) && (inv === exp.inv);
+      isFundMatch    = (fund === exp.fund);
+      isVoicingMatch = (config.voicingMode==='both' ? (userVoicing === correctVoicing) : true);
+    }
 
     let gained = 0;
     let examPoints = 0;
     let feedbackHTML = '';
 
     answeredThisQuestion = true;
-    submitBtn.disabled = true;
+    submitBtn.disabled   = true;
 
     const orderPlayed = currentNotes.map(enhText).join(' – ');
 
@@ -697,7 +880,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
     } else if (within && isTypeMatch && isFundMatch && !isVoicingMatch) {
-      // Cette branche ne peut arriver que si voicingMode === 'both'
+      // voicing différent (possible uniquement si mode both)
       if (config.gametype === 'test') {
         gained = Math.round(computeQuestionPoints(true, t, config) / 2);
         scoreTotal += gained;
@@ -743,7 +926,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ============================
-     12) HUD TIMER (unique)
+     12) HUD TIMER
      ============================ */
   function startHudTimer(){
     stopHudTimer();
@@ -751,6 +934,9 @@ document.addEventListener('DOMContentLoaded', () => {
     hudTimerId = setInterval(updateHud, 500);
   }
   function stopHudTimer(){
-    if (hudTimerId){ clearInterval(hudTimerId); hudTimerId = null; }
+    if (hudTimerId){
+      clearInterval(hudTimerId);
+      hudTimerId = null;
+    }
   }
 });

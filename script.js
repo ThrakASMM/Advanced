@@ -837,18 +837,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const exp = parseAnswer(correctAnswer);
 
-    let isTypeMatch, isFundMatch, isVoicingMatch;
+let isTypeMatch;
+let isFundMatch;
+let isVoicingMatch;
 
-    if (exp.chord === 'TBN1') {
-      // TBN1 : pas de renversement ni de voicing à vérifier
-      isTypeMatch    = (chord === exp.chord);
-      isFundMatch    = (fund === exp.fund);
-      isVoicingMatch = true;
-    } else {
-      isTypeMatch    = (chord === exp.chord) && (inv === exp.inv);
-      isFundMatch    = (fund === exp.fund);
-      isVoicingMatch = (config.voicingMode==='both' ? (userVoicing === correctVoicing) : true);
-    }
+// ----- Dim7 : chiffrage par la basse, pas de renversement -----
+if (exp.chord === 'Dim7') {
+  isTypeMatch    = (chord === 'Dim7');
+  isFundMatch    = (fund === exp.fund); // basse réelle
+  isVoicingMatch = (config.voicingMode === 'both'
+                    ? (userVoicing === correctVoicing)
+                    : true);
+
+// ----- TBN1 -----
+} else if (exp.chord === 'TBN1') {
+  isTypeMatch    = (chord === 'TBN1');
+  isFundMatch    = (fund === exp.fund);
+  isVoicingMatch = true;
+
+// ----- Cas standard -----
+} else {
+  isTypeMatch    = (chord === exp.chord) && (inv === exp.inv);
+  isFundMatch    = (fund === exp.fund);
+  isVoicingMatch = (config.voicingMode === 'both'
+                    ? (userVoicing === correctVoicing)
+                    : true);
+}
 
     let gained = 0;
     let examPoints = 0;

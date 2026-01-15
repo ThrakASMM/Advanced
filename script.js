@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
    ============================ */
   const AUDIOCFG = {
     simult_volume: 0.9,
-    simult_hold: 2800,
+    simult_hold: 5000,
     simult_fade: 420,
     seq_gap: 600,
     seq_extra_hold: 300,

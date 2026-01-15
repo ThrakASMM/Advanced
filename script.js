@@ -205,7 +205,6 @@ document.addEventListener('DOMContentLoaded', () => {
     noteGapMs: AUDIOCFG.timings.training.noteGapMs,
     totalQuestions: TOTAL_QUESTIONS_DEFAULT,
   };
-  let chordPool = chordStructuresMaster;
 
   let currentNotes=null, firstNotePlayed=null, correctAnswer='', correctVoicing='close';
   let questionIndex=-1, scoreTotal=0, examPointsByIndex=[], gamePointsByIndex=[];
@@ -334,8 +333,6 @@ document.addEventListener('DOMContentLoaded', () => {
     config.noteGapMs  = base.noteGapMs || 0;
 
     config.totalQuestions = TOTAL_QUESTIONS_DEFAULT;
-
-    chordPool = chordStructuresMaster.filter(s=>config.allowedChords.includes(s.type));
   }
 
   document.querySelectorAll('[name="gametype"]').forEach(r=>r.addEventListener('change',applySettings));
@@ -642,16 +639,28 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ============================
-     10b) GÉNÉRATION QUESTION
+     10b) GÉNÉRATION QUESTION — TIRAGE ÉQUILIBRÉ PAR FAMILLE
      ============================ */
   function generateQuestion(){
-    const structure = getRandom(chordPool);
+    let structure;
+
+    if (config.allowedChords.length === 0) return;
+
+    // 1. Choisir un type au hasard parmi les autorisés
+    const selectedType = getRandom(config.allowedChords);
+
+    // 2. Prendre toutes les structures de ce type
+    const structuresOfType = chordStructuresMaster.filter(s => s.type === selectedType);
+
+    // 3. Choisir une structure au hasard dans ce type
+    structure = getRandom(structuresOfType);
+
     const baseNote  = getRandomBaseNote();
 
     if (structure.type === 'Maj2') {
       const triadFundName = getRandom(Object.keys(noteMap));
       const triadFundIdx  = noteMap[triadFundName];
-      const bassIdx = (triadFundIdx + 2) % 12; // basse = fondamentale - 1 ton
+      const bassIdx = (triadFundIdx + 2) % 12;
       const bassOct = AUDIO_MIN_OCT;
       const bassNote = makeNote(bassIdx, bassOct);
 
@@ -809,7 +818,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (exp.chord === 'Maj2') {
       isTypeMatch    = (chord === 'Maj2');
       isFundMatch    = (fund === exp.fund);
-      isVoicingMatch = true;  // Pas de voicing pour Maj/2
+      isVoicingMatch = true;
     } else {
       isTypeMatch    = (chord === exp.chord) && (inv === exp.inv);
       isFundMatch    = (fund === exp.fund);

@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fail:    `${SCORE_IMG_PATH}/fail.png`,
   };
 
-  const AUDIO_MIN_OCT = 2; // fichiers audio C2..B4
+  const AUDIO_MIN_OCT = 2;
   const AUDIO_MAX_OCT = 4;
   const MAX_TOP_OCT   = 6;
 
@@ -69,55 +69,50 @@ document.addEventListener('DOMContentLoaded', () => {
     return enharm[name] ? `${name}/${enharm[name]}${o}` : n;
   };
 
-  // ➕ Ajout Dim7 + TBN1
-  const ALL_CHORDS = ['Maj7','Min7','7sus4','7','-7b5','Dim7','TBN1'];
+  const ALL_CHORDS = ['Maj7','Min7','7sus4','7','-7b5','Dim7','Maj2'];
   const INVERSIONS = ['Root Position','First Inversion','Second Inversion','Third Inversion'];
 
   /* ============================
      2) STRUCTURES 4-SONS (CLOSE)
      ============================ */
   const chordStructuresMaster = [
-    // PF
     { type:'Maj7',  intervals:[4,3,4], inversion:'PF' },
     { type:'Min7',  intervals:[3,4,3], inversion:'PF' },
     { type:'7sus4', intervals:[5,2,3], inversion:'PF' },
     { type:'7',     intervals:[4,3,3], inversion:'PF' },
     { type:'-7b5',  intervals:[3,3,4], inversion:'PF' },
-    { type:'Dim7',  intervals:[3,3,3], inversion:'PF' }, // Dim7 : une seule position (pas de renversements)
+    { type:'Dim7',  intervals:[3,3,3], inversion:'PF' },
 
-    // R1
     { type:'Maj7',  intervals:[3,4,1], inversion:'R1' },
     { type:'Min7',  intervals:[4,3,2], inversion:'R1' },
     { type:'7sus4', intervals:[2,3,2], inversion:'R1' },
     { type:'7',     intervals:[3,3,2], inversion:'R1' },
     { type:'-7b5',  intervals:[3,4,2], inversion:'R1' },
 
-    // R2
     { type:'Maj7',  intervals:[4,1,4], inversion:'R2' },
     { type:'Min7',  intervals:[3,2,3], inversion:'R2' },
     { type:'7sus4', intervals:[3,2,5], inversion:'R2' },
     { type:'7',     intervals:[3,2,4], inversion:'R2' },
     { type:'-7b5',  intervals:[4,2,3], inversion:'R2' },
 
-    // R3
     { type:'Maj7',  intervals:[1,4,3], inversion:'R3' },
     { type:'Min7',  intervals:[2,3,4], inversion:'R3' },
     { type:'7sus4', intervals:[2,5,2], inversion:'R3' },
     { type:'7',     intervals:[2,4,3], inversion:'R3' },
     { type:'-7b5',  intervals:[2,3,3], inversion:'R3' },
 
-    // Marqueur TBN1 (géré à part, pas via analyzeChord)
-    { type:'TBN1', intervals:[0,0,0], inversion:'PF' },
+    { type:'Maj2', intervals:[0,0,0], inversion:'PF' },
   ];
 
   /* ============================
-     3) AUDIO HTML5 + TIMERS
+     3) AUDIO
      ============================ */
   const notes={};
   for(let o=AUDIO_MIN_OCT;o<=AUDIO_MAX_OCT;o++){
     Object.keys(noteMap).forEach(n=>notes[`${n}${o}`]=`audio/${n}${o}.mp3`);
   }
   const audioCache={}, activeAudios=new Set(), pendingTimers=new Set();
+
   function later(cb,ms){
     const id=setTimeout(()=>{
       pendingTimers.delete(id);
@@ -126,10 +121,12 @@ document.addEventListener('DOMContentLoaded', () => {
     pendingTimers.add(id);
     return id;
   }
+
   function clearAllTimers(){
     pendingTimers.forEach(id=>clearTimeout(id));
     pendingTimers.clear();
   }
+
   function getAudioSafe(noteKey){
     if(!audioCache[noteKey]){
       const a=new Audio(notes[noteKey]);
@@ -140,6 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clone.preload='auto';
     return clone;
   }
+
   function stopWithFade(audio, fadeMs=220){
     try{
       const steps=8, stepDur=Math.max(10,Math.floor(fadeMs/steps));
@@ -156,6 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }, stepDur);
     }catch{}
   }
+
   function stopAllAudioNow(){
     try{
       activeAudios.forEach(a=>{try{a.pause();a.currentTime=0;}catch{}});
@@ -163,6 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
       clearAllTimers();
     }catch{}
   }
+
   function playNote(noteKey,{volume=1,startDelayMs=0,maxDurMs=1200,fadeOutMs=0}={}){
     const a=getAudioSafe(noteKey); a.volume=volume; activeAudios.add(a);
     later(()=>{try{a.currentTime=0; a.play().catch(()=>{});}catch{}}, Math.max(0,startDelayMs));
@@ -176,6 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }, startDelayMs+maxDurMs);
     }
   }
+
   function playChordArray(arr){
     if(getMode()==='sequential'){
       const gap=Math.max(400,AUDIOCFG.seq_gap), lastH=AUDIOCFG.seq_last_hold;
@@ -197,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let config = {
     gametype: 'training',
     mode: 'sequential',
-    voicingMode: 'close', // 'close' | 'drop2' | 'both'
+    voicingMode: 'close',
     allowedChords: ALL_CHORDS.slice(),
     preDelayMs: AUDIOCFG.timings.training.preDelayMs,
     playbackMs: AUDIOCFG.timings.training.playbackMs,
@@ -226,7 +227,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return `${name}${oct}`;
   }
 
-  // Close voicing builder
   function buildClose(baseNote, structure){
     const b=splitNote(baseNote);
     const arr=[baseNote];
@@ -248,7 +248,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return arr.sort(byMidi);
   }
 
-  // Drop 2 : monte la 2e note (du grave vers l’aigu) d’une octave
   function toDrop2(arr){
     const out=arr.slice().sort(byMidi);
     const s=splitNote(out[1]);
@@ -274,46 +273,48 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function parseAnswer(str){
+    str = str.replace(/DDim7/i, 'Ddim7');
+    str = str.replace(/dim7/i, 'dim7');
+
     const invs=['PF','R1','R2','R3'];
     const inv=invs.find(s=>str.endsWith(s))||'PF';
     const body=str.slice(0,-inv.length);
+
     const types=ALL_CHORDS.slice();
+    const sortedTypes = types.slice().sort((a,b) => b.length - a.length);
+
     let chord='', tonic='';
-    for(const t of types){
-      if(body.endsWith(t)){
+    for(const t of sortedTypes){
+      if(body.toLowerCase().endsWith(t.toLowerCase())){
         chord=t;
-        tonic=body.slice(0, body.length-t.length);
+        tonic=body.slice(0, body.length - t.length);
         break;
       }
     }
-    return { fund:tonic, chord, inv };
+
+    if ((str.includes('dim7') || str.includes('Dim7')) && (!chord || chord === '7')) {
+      chord = 'Dim7';
+      const idx = body.toLowerCase().indexOf('dim7');
+      if (idx !== -1) tonic = body.slice(0, idx);
+    }
+
+    return { fund:tonic.trim(), chord, inv };
   }
 
   /* ============================
-     6) CHECKBOXES (menu)
+     6) CHECKBOXES
      ============================ */
   function updateSelectedCount(){
     const n=chordChecksWrap.querySelectorAll('input[type="checkbox"]:checked').length;
     selectedCountEl.textContent=`${n} sélectionnée${n>1?'s':''}`;
   }
-  chordChecksWrap.addEventListener('change',()=>{
-    applySettings();
-    updateSelectedCount();
-  });
-  selectAllBtnChords.onclick=()=>{
-    chordChecksWrap.querySelectorAll('input').forEach(c=>c.checked=true);
-    applySettings();
-    updateSelectedCount();
-  };
-  deselectAllBtnChords.onclick=()=>{
-    chordChecksWrap.querySelectorAll('input').forEach(c=>c.checked=false);
-    applySettings();
-    updateSelectedCount();
-  };
+  chordChecksWrap.addEventListener('change',()=>{ applySettings(); updateSelectedCount(); });
+  selectAllBtnChords.onclick=()=>{ chordChecksWrap.querySelectorAll('input').forEach(c=>c.checked=true); applySettings(); updateSelectedCount(); };
+  deselectAllBtnChords.onclick=()=>{ chordChecksWrap.querySelectorAll('input').forEach(c=>c.checked=false); applySettings(); updateSelectedCount(); };
   updateSelectedCount();
 
   /* ============================
-     7) RÉGLAGES & AFFICHAGES
+     7) RÉGLAGES
      ============================ */
   function applySettings(){
     config.gametype    = getGametype();
@@ -336,45 +337,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     chordPool = chordStructuresMaster.filter(s=>config.allowedChords.includes(s.type));
   }
+
   document.querySelectorAll('[name="gametype"]').forEach(r=>r.addEventListener('change',applySettings));
   document.querySelectorAll('[name="mode"]').forEach(r=>r.addEventListener('change',applySettings));
   document.querySelectorAll('[name="voicingMode"]').forEach(r=>r.addEventListener('change',applySettings));
   applySettings();
 
   /* ============================
-     7b) VISIBILITÉ SELECTS (Dim7 / TBN1)
+     7b) VISIBILITÉ SELECTS
      ============================ */
-     function updateSelectVisibility(){
-      const chord = chordSelect.value;
-    
-      // 1) RENVERSEMENTS
-      // Dim7 et TBN1 : pas de renversements
-      if (chord === 'Dim7' || chord === 'TBN1') {
-        inversionSelect.style.display = 'none';
-      } else {
-        inversionSelect.style.display = '';
-      }
-    
-      // 2) VOICING (Close / Drop 2)
-      // TBN1 seulement : pas de choix de voicing
-      if (chord === 'TBN1') {
-        voicingSelect.style.display = 'none';
-      } else {
-        // Pour TOUS les autres accords (y compris Dim7) :
-        // - si voicingMode === 'both' → on montre le select
-        // - sinon → on le cache (comme avant)
-        if (config.voicingMode === 'both') {
-          voicingSelect.style.display = '';
-        } else {
-          voicingSelect.style.display = 'none';
-        }
-      }
-    }
-
+  function updateSelectVisibility(){
+    const chord = chordSelect.value;
+    inversionSelect.style.display = (chord === 'Dim7' || chord === 'Maj2') ? 'none' : '';
+    voicingSelect.style.display = (chord === 'Maj2') ? 'none' : (config.voicingMode === 'both' ? '' : 'none');
+  }
   chordSelect.addEventListener('change', updateSelectVisibility);
 
   /* ============================
-     8) LANCEMENT / NAV
+     8) NAVIGATION
      ============================ */
   startBtn.onclick   = startGame;
   backBtn.onclick    = ()=>backToMenu();
@@ -438,7 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ============================
-     9) TEST — SÉRIE & FIN
+     9) FIN DE TEST
      ============================ */
   function advance(){
     questionIndex += 1;
@@ -501,7 +481,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!mount) return;
 
     const all = loadScores();
-
     mount.innerHTML = '';
     if (!all || !all.length) return;
 
@@ -521,21 +500,12 @@ document.addEventListener('DOMContentLoaded', () => {
     table.className = 'score-table';
 
     const thead = document.createElement('thead');
-    thead.innerHTML =
-      '<tr>' +
-        '<th>Rang</th>' +
-        '<th>Note</th>' +
-        '<th>Score</th>' +
-        '<th>Mode</th>' +
-        '<th>Accords</th>' +
-        '<th>Temps moyen</th>' +
-      '</tr>';
+    thead.innerHTML = '<tr><th>Rang</th><th>Note</th><th>Score</th><th>Mode</th><th>Accords</th><th>Temps moyen</th></tr>';
 
     const tbody = document.createElement('tbody');
 
     top5.forEach((s, idx) => {
       const tr = document.createElement('tr');
-
       const td = (label, text) => {
         const cell = document.createElement('td');
         cell.setAttribute('data-label', label);
@@ -543,22 +513,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return cell;
       };
 
-      const modeText =
-        (s.gametype || '-') + ' / ' + (s.mode || '-') +
-        (s.voicingMode ? (' / ' + s.voicingMode) : '');
-
-      const chordsText =
-        (Array.isArray(s.chords) && s.chords.length) ? s.chords.join(', ') : '—';
-
-      const avgTimeText =
-        (typeof s.avgTime === 'number' ? s.avgTime.toFixed(1) : '0.0') + 's';
-
       tr.appendChild(td('Rang', '#' + (idx + 1)));
       tr.appendChild(td('Note', String(Math.round(s.grade20 || 0)) + '/20'));
       tr.appendChild(td('Score', String(s.score || 0)));
-      tr.appendChild(td('Mode', modeText));
-      tr.appendChild(td('Accords', chordsText));
-      tr.appendChild(td('Temps moyen', avgTimeText));
+      tr.appendChild(td('Mode', (s.gametype || '-') + ' / ' + (s.mode || '-') + (s.voicingMode ? ' / ' + s.voicingMode : '')));
+      tr.appendChild(td('Accords', (Array.isArray(s.chords) && s.chords.length) ? s.chords.join(', ') : '—'));
+      tr.appendChild(td('Temps moyen', (typeof s.avgTime === 'number' ? s.avgTime.toFixed(1) : '0.0') + 's'));
 
       tbody.appendChild(tr);
     });
@@ -566,7 +526,6 @@ document.addEventListener('DOMContentLoaded', () => {
     table.appendChild(thead);
     table.appendChild(tbody);
     wrap.appendChild(table);
-
     mount.appendChild(h3);
     mount.appendChild(wrap);
   }
@@ -595,13 +554,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ============================
-     10) QUESTIONS — COMMUN
+     10) QUESTIONS COMMUNES
      ============================ */
   function nextQuestionCommon(){
     validationDiv.textContent='';
     resultDiv.textContent='';
     nextBtn.disabled=false;
-
     answeredThisQuestion = false;
     submitBtn.disabled = false;
 
@@ -635,16 +593,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function buildSelects(){
-    // familles
     chordSelect.innerHTML = '';
     (config.allowedChords.length?config.allowedChords:ALL_CHORDS).forEach(t=>{
       const o=document.createElement('option');
       o.value=t;
-      o.textContent=t;
+      o.textContent = t === 'Maj2' ? 'Maj/2' : t;
       chordSelect.appendChild(o);
     });
 
-    // inversions
     inversionSelect.innerHTML = '';
     INVERSIONS.forEach(inv=>{
       const o=document.createElement('option');
@@ -653,7 +609,6 @@ document.addEventListener('DOMContentLoaded', () => {
       inversionSelect.appendChild(o);
     });
 
-    // fondamentales
     fundamentalSelect.innerHTML = '';
     Object.keys(noteMap).forEach(n=>{
       const o=document.createElement('option');
@@ -663,9 +618,7 @@ document.addEventListener('DOMContentLoaded', () => {
       fundamentalSelect.appendChild(o);
     });
 
-    // voicing (sélecteur de réponse)
     voicingSelect.value=(config.voicingMode==='drop2'?'drop2':'close');
-
     updateSelectVisibility();
   }
 
@@ -689,26 +642,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ============================
-     10b) GÉNÉRATION DES QUESTIONS
+     10b) GÉNÉRATION QUESTION
      ============================ */
   function generateQuestion(){
     const structure = getRandom(chordPool);
     const baseNote  = getRandomBaseNote();
 
-    // ----- CAS TBN1 (type C basse de D) -----
-    if (structure.type === 'TBN1') {
-      // Fondamentale de la triade (celle que l’élève doit trouver)
+    if (structure.type === 'Maj2') {
       const triadFundName = getRandom(Object.keys(noteMap));
       const triadFundIdx  = noteMap[triadFundName];
-
-      // Basse : un ton en dessous (C basse de D, etc.)
-      // Basse : la 9e de la triade (un ton au-dessus)
-     const bassIdx = (triadFundIdx + 2) % 12;   // +2 = 9e
-
+      const bassIdx = (triadFundIdx + 2) % 12; // basse = fondamentale - 1 ton
       const bassOct = AUDIO_MIN_OCT;
       const bassNote = makeNote(bassIdx, bassOct);
 
-      // Triade majeure au-dessus de la basse
       const rootOct = bassOct + 1;
       const root    = makeNote(triadFundIdx, rootOct);
 
@@ -724,7 +670,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       let triad = [root, third, fifth].sort(byMidi);
 
-      // Renversement interne aléatoire de la triade (0, 1 ou 2 rotations)
       const rotations = Math.floor(Math.random()*3);
       for(let i=0;i<rotations;i++){
         const n = triad.shift();
@@ -735,15 +680,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       let notes = [bassNote, ...triad].sort(byMidi);
 
-      // Limiter la note la plus aiguë
       const top = splitNote(notes[notes.length-1]);
       if (top.oct > MAX_TOP_OCT){
         notes[notes.length-1] = makeNote(top.idx, MAX_TOP_OCT);
       }
 
       currentNotes   = notes;
-      correctVoicing = 'close'; // pas de Drop 2 pour TBN1
-      correctAnswer  = `${triadFundName}TBN1PF`;
+      correctVoicing = 'close';
+      correctAnswer  = `${triadFundName}Maj2PF`;
 
       firstNotePlayed = notes[Math.floor(Math.random()*notes.length)];
       questionDiv.textContent = `Note jouée : ${enhText(firstNotePlayed)}`;
@@ -753,10 +697,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // ----- CAS STANDARD (Maj7, Min7, 7sus4, 7, -7b5, Dim7) -----
     const close = buildClose(baseNote, structure);
 
-    // choisir voicing effectif selon config
     let effectiveVoicing = 'close';
     if (config.voicingMode === 'drop2')       effectiveVoicing = 'drop2';
     else if (config.voicingMode === 'both')   effectiveVoicing = (Math.random()<0.5?'close':'drop2');
@@ -766,12 +708,23 @@ document.addEventListener('DOMContentLoaded', () => {
     currentNotes   = voiced;
     correctVoicing = effectiveVoicing;
 
-    // Analyse (toujours sur close) pour construire la bonne réponse
     const a = analyzeChord(close);
-    correctAnswer = `${a.fundamental}${a.chordType}${a.inversion}`;
 
-    // Note repère
-    firstNotePlayed = voiced[Math.floor(Math.random()*4)];
+    let chordTypeStr = a.chordType;
+    if (a.chordType === 'Dim7') {
+      chordTypeStr = 'dim7';
+    }
+
+    correctAnswer = `${a.fundamental}${chordTypeStr}${a.inversion}`;
+
+    let displayCorrect = correctAnswer;
+    if (a.chordType === 'Dim7') {
+      displayCorrect = `${a.fundamental}Dim7${a.inversion}`;
+    } else if (a.chordType === 'Maj2') {
+      displayCorrect = `${a.fundamental}Maj/2${a.inversion}`;
+    }
+
+    firstNotePlayed = voiced[Math.floor(Math.random()*voiced.length)];
     questionDiv.textContent = `Note jouée : ${enhText(firstNotePlayed)}`;
 
     questionStartTime = Date.now();
@@ -779,7 +732,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ============================
-     11) HUD / SCORE / VALIDATION
+     11) VALIDATION
      ============================ */
   let hudTimerId = null;
 
@@ -801,6 +754,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const voicingBoost  = (cfg.voicingMode==='both') ? 1.15 : 1.00;
     return Math.min(2.20, Number((chordBoost * modeBoost * voicingBoost).toFixed(2)));
   }
+
   function getTimeBonus(s){
     const t=Math.max(0,s);
     if (t<=1.5) return 150;
@@ -814,10 +768,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (t<=45)  return 15;
     return 5;
   }
+
   function computeQuestionPoints(ok, s, cfg){
     if(!ok) return 0;
     return Math.round((100 + getTimeBonus(s)) * getDifficultyMultiplier(cfg));
   }
+
   const uiInvToCode = s => s==='Root Position'?'PF'
                           : s==='First Inversion'?'R1'
                           : s==='Second Inversion'?'R2'
@@ -828,41 +784,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const chord = chordSelect.value;
     const fund  = fundamentalSelect.value;
-    const invUi = inversionSelect.value;
+    const invUi = inversionSelect.value || 'Root Position';
     const inv   = uiInvToCode(invUi);
-    const userVoicing = voicingSelect.value; // 'close'|'drop2'
+    const userVoicing = voicingSelect.value;
 
     const t = (Date.now()-questionStartTime)/1000;
     const within = (config.gametype === 'test') ? (t <= EXAM_TIME_LIMIT_S) : true;
 
     const exp = parseAnswer(correctAnswer);
 
-let isTypeMatch;
-let isFundMatch;
-let isVoicingMatch;
+    let displayCorrect = correctAnswer;
+    if (correctAnswer.includes('dim7')) {
+      displayCorrect = correctAnswer.replace('dim7', 'Dim7');
+    } else if (correctAnswer.includes('Maj2')) {
+      displayCorrect = correctAnswer.replace('Maj2', 'Maj/2');
+    }
 
-// ----- Dim7 : chiffrage par la basse, pas de renversement -----
-if (exp.chord === 'Dim7') {
-  isTypeMatch    = (chord === 'Dim7');
-  isFundMatch    = (fund === exp.fund); // basse réelle
-  isVoicingMatch = (config.voicingMode === 'both'
-                    ? (userVoicing === correctVoicing)
-                    : true);
+    let isTypeMatch, isFundMatch, isVoicingMatch;
 
-// ----- TBN1 -----
-} else if (exp.chord === 'TBN1') {
-  isTypeMatch    = (chord === 'TBN1');
-  isFundMatch    = (fund === exp.fund);
-  isVoicingMatch = true;
-
-// ----- Cas standard -----
-} else {
-  isTypeMatch    = (chord === exp.chord) && (inv === exp.inv);
-  isFundMatch    = (fund === exp.fund);
-  isVoicingMatch = (config.voicingMode === 'both'
-                    ? (userVoicing === correctVoicing)
-                    : true);
-}
+    if (exp.chord === 'Dim7') {
+      isTypeMatch    = (chord === 'Dim7');
+      isFundMatch    = (fund === exp.fund);
+      isVoicingMatch = (config.voicingMode === 'both' ? (userVoicing === correctVoicing) : true);
+    } else if (exp.chord === 'Maj2') {
+      isTypeMatch    = (chord === 'Maj2');
+      isFundMatch    = (fund === exp.fund);
+      isVoicingMatch = true;  // Pas de voicing pour Maj/2
+    } else {
+      isTypeMatch    = (chord === exp.chord) && (inv === exp.inv);
+      isFundMatch    = (fund === exp.fund);
+      isVoicingMatch = (config.voicingMode === 'both' ? (userVoicing === correctVoicing) : true);
+    }
 
     let gained = 0;
     let examPoints = 0;
@@ -872,6 +824,18 @@ if (exp.chord === 'Dim7') {
     submitBtn.disabled   = true;
 
     const orderPlayed = currentNotes.map(enhText).join(' – ');
+
+    let voicingDisplay = correctVoicing;
+    if (exp.chord === 'Dim7') {
+      voicingDisplay = correctVoicing;
+    } else if (exp.chord === 'Maj2') {
+      voicingDisplay = 'close';
+    }
+
+    let extraHint = '';
+    if (exp.chord === 'Maj2') {
+      extraHint = '<div style="margin-top:8px; font-size:13px; color:#555;">Rappel : pour Maj/2, le nom vient de la triade majeure (pas de la basse !)</div>';
+    }
 
     if (within && isTypeMatch && isFundMatch && isVoicingMatch) {
       if (config.gametype === 'test') {
@@ -885,16 +849,16 @@ if (exp.chord === 'Dim7') {
             • Mult. ×${getDifficultyMultiplier(config).toFixed(2)}
             → <strong>${gained} pts</strong>
           </div>
-          <div style="margin-top:6px;font-size:14px;opacity:.85;">Voicing : ${correctVoicing} • Notes : ${orderPlayed}</div>`;
+          <div style="margin-top:6px;font-size:14px;opacity:.85;">Voicing : ${voicingDisplay} • Notes : ${orderPlayed}</div>
+          ${extraHint}`;
         nextBtn.disabled = true;
         later(()=>{ nextBtn.disabled=false; advance(); }, 1200);
       } else {
         feedbackHTML = `<span style="color:#1f8b24; font-weight:700;">Correct ! ✅</span>
-                        <div style="margin-top:6px;font-size:14px;opacity:.85;">Voicing : ${correctVoicing} • Notes : ${orderPlayed}</div>`;
+                        <div style="margin-top:6px;font-size:14px;opacity:.85;">Voicing : ${voicingDisplay} • Notes : ${orderPlayed}</div>
+                        ${extraHint}`;
       }
-
     } else if (within && isTypeMatch && isFundMatch && !isVoicingMatch) {
-      // voicing différent (possible uniquement si mode both)
       if (config.gametype === 'test') {
         gained = Math.round(computeQuestionPoints(true, t, config) / 2);
         scoreTotal += gained;
@@ -902,31 +866,33 @@ if (exp.chord === 'Dim7') {
         feedbackHTML = `
           <span style="color:#2e7dd7; font-weight:700;">Presque ! ✳️</span>
           <div style="margin-top:6px; font-size:14px;">
-            Type + renversement + tonique OK, mais voicing incorrect<br>
+            Type + tonique OK, mais voicing incorrect<br>
             → <strong>${gained} pts</strong> • <strong>+1 pt (examen)</strong><br>
-            Attendu : <strong>${correctAnswer}</strong> (${correctVoicing})
+            Attendu : <strong>${displayCorrect}</strong> (${voicingDisplay})
           </div>
-          <div style="margin-top:6px;font-size:14px;opacity:.85;">Notes : ${orderPlayed}</div>`;
+          <div style="margin-top:6px;font-size:14px;opacity:.85;">Notes : ${orderPlayed}</div>
+          ${extraHint}`;
       } else {
         feedbackHTML = `
           <span style="color:#2e7dd7; font-weight:700;">Voicing incorrect</span>
           <div style="margin-top:6px; font-size:14px;">
-            Attendu : <strong>${correctAnswer}</strong> (${correctVoicing})
+            Attendu : <strong>${displayCorrect}</strong> (${voicingDisplay})
           </div>
-          <div style="margin-top:6px;font-size:14px;opacity:.85;">Notes : ${orderPlayed}</div>`;
+          <div style="margin-top:6px;font-size:14px;opacity:.85;">Notes : ${orderPlayed}</div>
+          ${extraHint}`;
       }
-
     } else if (!within && config.gametype === 'test') {
       feedbackHTML = `
         <span style="color:#c62828;">⏱️ Temps dépassé (&gt; ${EXAM_TIME_LIMIT_S}s) — 0 pt</span>
-        <div style="margin-top:6px;">Bonne réponse : <strong>${correctAnswer}</strong> (${correctVoicing})</div>
-        <div style="margin-top:6px;font-size:14px;opacity:.85;">Notes : ${orderPlayed}</div>`;
-
+        <div style="margin-top:6px;">Bonne réponse : <strong>${displayCorrect}</strong> (${voicingDisplay})</div>
+        <div style="margin-top:6px;font-size:14px;opacity:.85;">Notes : ${orderPlayed}</div>
+        ${extraHint}`;
     } else {
       feedbackHTML = `
-        <span style="color:#c62828;">Incorrect ❌ — bonne réponse : <strong>${correctAnswer}</strong> (${correctVoicing})</span>
+        <span style="color:#c62828;">Incorrect ❌ — Attendu : <strong>${displayCorrect}</strong> (${voicingDisplay})</span>
         <div class="hint-relisten">Réécoute puis “${config.gametype==='test'?'Question suivante':'Nouvel accord'}”.</div>
-        <div style="margin-top:6px;font-size:14px;opacity:.85;">Notes : ${orderPlayed}</div>`;
+        <div style="margin-top:6px;font-size:14px;opacity:.85;">Notes : ${orderPlayed}</div>
+        ${extraHint}`;
       examPoints = 0;
     }
 

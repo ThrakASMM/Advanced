@@ -2,7 +2,7 @@
 document.addEventListener('DOMContentLoaded', () => {
 
   /* ============================
-   0) RÉGLAGES AUDIO (release doux)
+   0) RÉGLAGES AUDIO
    ============================ */
   const AUDIOCFG = {
     simult_volume: 0.9,
@@ -105,91 +105,114 @@ document.addEventListener('DOMContentLoaded', () => {
   ];
 
   /* ============================
-     3) AUDIO
+     3) AUDIO — Web Audio API
      ============================ */
-  const notes={};
-  for(let o=AUDIO_MIN_OCT;o<=AUDIO_MAX_OCT;o++){
-    Object.keys(noteMap).forEach(n=>notes[`${n}${o}`]=`audio/${n}${o}.mp3`);
-  }
-  const audioCache={}, activeAudios=new Set(), pendingTimers=new Set();
+  let audioCtx = null;
+  const buffers = {};
+  const activeSources = new Set();
 
-  function later(cb,ms){
-    const id=setTimeout(()=>{
-      pendingTimers.delete(id);
-      try{cb();}catch{}
-    },ms);
-    pendingTimers.add(id);
-    return id;
-  }
+  async function initAudioContext() {
+    if (audioCtx && audioCtx.state !== 'closed') return;
 
-  function clearAllTimers(){
-    pendingTimers.forEach(id=>clearTimeout(id));
-    pendingTimers.clear();
-  }
-
-  function getAudioSafe(noteKey){
-    if(!audioCache[noteKey]){
-      const a=new Audio(notes[noteKey]);
-      a.preload='auto';
-      audioCache[noteKey]=a;
+    if (window.location.protocol === 'file:') {
+      alert("Erreur : impossible de charger les sons en mode fichier local (file://).\n\n" +
+            "Solution :\n" +
+            "1. Dans Terminal : cd [ton dossier]\n" +
+            "2. Tape : python3 -m http.server 8000\n" +
+            "3. Ouvre http://localhost:8000 dans ton navigateur\n\n" +
+            "Ou utilise l'extension Live Server dans VS Code.");
+      return;
     }
-    const clone=new Audio(audioCache[noteKey].src);
-    clone.preload='auto';
-    return clone;
-  }
 
-  function stopWithFade(audio, fadeMs=220){
-    try{
-      const steps=8, stepDur=Math.max(10,Math.floor(fadeMs/steps));
-      let i=0, startVol=audio.volume;
-      const iv=setInterval(()=>{
-        i++;
-        audio.volume=startVol*Math.max(0,1-i/steps);
-        if(i>=steps){
-          clearInterval(iv);
-          try{audio.pause();audio.currentTime=0;}catch{}
-          audio.volume=startVol;
-          activeAudios.delete(audio);
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+    const promises = [];
+    for (let o = AUDIO_MIN_OCT; o <= AUDIO_MAX_OCT; o++) {
+      Object.keys(noteMap).forEach(n => {
+        const key = `${n}${o}`;
+        if (!buffers[key]) {
+          promises.push(
+            fetch(`audio/${n}${o}.mp3`)
+              .then(r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status} pour ${key}`);
+                return r.arrayBuffer();
+              })
+              .then(ab => audioCtx.decodeAudioData(ab))
+              .then(buf => buffers[key] = buf)
+              .catch(err => console.error(`Échec chargement ${key}: ${err}`))
+          );
         }
-      }, stepDur);
-    }catch{}
-  }
-
-  function stopAllAudioNow(){
-    try{
-      activeAudios.forEach(a=>{try{a.pause();a.currentTime=0;}catch{}});
-      activeAudios.clear();
-      clearAllTimers();
-    }catch{}
-  }
-
-  function playNote(noteKey,{volume=1,startDelayMs=0,maxDurMs=1200,fadeOutMs=0}={}){
-    const a=getAudioSafe(noteKey); a.volume=volume; activeAudios.add(a);
-    later(()=>{try{a.currentTime=0; a.play().catch(()=>{});}catch{}}, Math.max(0,startDelayMs));
-    if(maxDurMs>0){
-      later(()=>{
-        if(fadeOutMs>0) stopWithFade(a,fadeOutMs);
-        else{
-          try{a.pause();a.currentTime=0;}catch{}
-          activeAudios.delete(a);
-        }
-      }, startDelayMs+maxDurMs);
-    }
-  }
-
-  function playChordArray(arr){
-    if(getMode()==='sequential'){
-      const gap=Math.max(400,AUDIOCFG.seq_gap), lastH=AUDIOCFG.seq_last_hold;
-      arr.forEach((n,i)=>{
-        const start=i*gap, last=i===arr.length-1;
-        const hold= last?lastH:(gap+AUDIOCFG.seq_extra_hold);
-        const fade= last?AUDIOCFG.seq_last_fade:AUDIOCFG.seq_note_fade;
-        playNote(n,{volume:1,startDelayMs:start,maxDurMs:hold,fadeOutMs:fade});
       });
-    }else{
-      const hold=AUDIOCFG.simult_hold;
-      arr.forEach(n=>playNote(n,{volume:AUDIOCFG.simult_volume,startDelayMs:0,maxDurMs:hold,fadeOutMs:AUDIOCFG.simult_fade}));
     }
+    await Promise.all(promises);
+    console.log("Tous les sons chargés via AudioContext !");
+  }
+
+  function later(cb, ms) {
+    return setTimeout(() => {
+      try { cb(); } catch (e) { console.error("Erreur dans later:", e); }
+    }, ms);
+  }
+
+  function playNote(noteKey, { volume = 1, startDelayMs = 0, maxDurMs = 1200, fadeOutMs = 0 }) {
+    if (!audioCtx || audioCtx.state === 'closed' || !buffers[noteKey]) {
+      console.warn("AudioContext fermé ou buffer manquant pour", noteKey);
+      return;
+    }
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffers[noteKey];
+
+    const gainNode = audioCtx.createGain();
+    gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
+
+    source.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    activeSources.add(source);
+
+    const startTime = audioCtx.currentTime + startDelayMs / 1000;
+    source.start(startTime);
+
+    if (maxDurMs > 0) {
+      const endTime = startTime + maxDurMs / 1000;
+      if (fadeOutMs > 0) {
+        const fadeStart = endTime - fadeOutMs / 1000;
+        gainNode.gain.setValueAtTime(volume, fadeStart);
+        gainNode.gain.linearRampToValueAtTime(0.001, endTime);
+      }
+      source.stop(endTime + 0.05);
+      later(() => activeSources.delete(source), (maxDurMs + 50));
+    }
+  }
+
+  function playChordArray(arr) {
+    if (getMode() === 'sequential') {
+      const gap = Math.max(400, AUDIOCFG.seq_gap);
+      const lastH = AUDIOCFG.seq_last_hold;
+      arr.forEach((n, i) => {
+        const start = i * gap;
+        const last = i === arr.length - 1;
+        const hold = last ? lastH : (gap + AUDIOCFG.seq_extra_hold);
+        const fade = last ? AUDIOCFG.seq_last_fade : AUDIOCFG.seq_note_fade;
+        playNote(n, { volume: 1, startDelayMs: start, maxDurMs: hold, fadeOutMs: fade });
+      });
+    } else {
+      arr.forEach(n => playNote(n, {
+        volume: AUDIOCFG.simult_volume,
+        startDelayMs: 0,
+        maxDurMs: AUDIOCFG.simult_hold,
+        fadeOutMs: AUDIOCFG.simult_fade
+      }));
+    }
+  }
+
+  function stopAllAudioNow() {
+    activeSources.forEach(source => {
+      try { source.stop(); } catch(e) {}
+    });
+    activeSources.clear();
   }
 
   /* ============================
@@ -370,7 +393,13 @@ document.addEventListener('DOMContentLoaded', () => {
       nextTrainingQuestion();
     }
   };
-  replayBothBtn.onclick  = () => { stopAllAudioNow(); playOneThenChord(); };
+  replayBothBtn.onclick  = () => {
+    stopAllAudioNow();
+    const delay = getRefAndChordDelay();
+    const refHold = Math.max(300, delay - AUDIOCFG.ref_hold_margin);
+    playNote(firstNotePlayed, { volume: 1.0, startDelayMs: 0, maxDurMs: refHold, fadeOutMs: 0 });
+    later(() => { playChordArray(currentNotes); }, delay);
+  };
   replayChordBtn.onclick = () => { stopAllAudioNow(); playChordArray(currentNotes); };
   submitBtn.onclick      = () => { stopAllAudioNow(); validateAnswer(); };
 
@@ -380,6 +409,8 @@ document.addEventListener('DOMContentLoaded', () => {
       chordWarning.style.display='block';
       return;
     }
+
+    await initAudioContext();
 
     menu.style.display='none';
     game.style.display='block';
@@ -630,29 +661,16 @@ document.addEventListener('DOMContentLoaded', () => {
     return base;
   }
 
-  function playOneThenChord(){
-    stopAllAudioNow();
-    const delay   = getRefAndChordDelay();
-    const refHold = Math.max(300, delay - AUDIOCFG.ref_hold_margin);
-    playNote(firstNotePlayed, { volume: 1.0, startDelayMs: 0, maxDurMs: refHold, fadeOutMs: 0 });
-    later(() => { playChordArray(currentNotes); }, delay);
-  }
-
   /* ============================
-     10b) GÉNÉRATION QUESTION — TIRAGE ÉQUILIBRÉ PAR FAMILLE
+     10b) GÉNÉRATION QUESTION
      ============================ */
   function generateQuestion(){
     let structure;
 
     if (config.allowedChords.length === 0) return;
 
-    // 1. Choisir un type au hasard parmi les autorisés
     const selectedType = getRandom(config.allowedChords);
-
-    // 2. Prendre toutes les structures de ce type
     const structuresOfType = chordStructuresMaster.filter(s => s.type === selectedType);
-
-    // 3. Choisir une structure au hasard dans ce type
     structure = getRandom(structuresOfType);
 
     const baseNote  = getRandomBaseNote();
@@ -702,7 +720,10 @@ document.addEventListener('DOMContentLoaded', () => {
       questionDiv.textContent = `Note jouée : ${enhText(firstNotePlayed)}`;
 
       questionStartTime = Date.now();
-      playOneThenChord();
+      const delay = getRefAndChordDelay();
+      const refHold = Math.max(300, delay - AUDIOCFG.ref_hold_margin);
+      playNote(firstNotePlayed, { volume: 1.0, startDelayMs: 0, maxDurMs: refHold, fadeOutMs: 0 });
+      later(() => { playChordArray(currentNotes); }, delay);
       return;
     }
 
@@ -737,7 +758,10 @@ document.addEventListener('DOMContentLoaded', () => {
     questionDiv.textContent = `Note jouée : ${enhText(firstNotePlayed)}`;
 
     questionStartTime = Date.now();
-    playOneThenChord();
+    const delay = getRefAndChordDelay();
+    const refHold = Math.max(300, delay - AUDIOCFG.ref_hold_margin);
+    playNote(firstNotePlayed, { volume: 1.0, startDelayMs: 0, maxDurMs: refHold, fadeOutMs: 0 });
+    later(() => { playChordArray(currentNotes); }, delay);
   }
 
   /* ============================

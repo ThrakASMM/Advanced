@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ear Training — Année 3</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:,"> <!-- Évite l'erreur 404 favicon -->
   <style>
-    /* Grille stable des sélecteurs de réponse */
     .chord-selects{display:grid;grid-template-columns:1fr;gap:14px;}
     @media (min-width:680px){.chord-selects{grid-template-columns:repeat(4,1fr);} }
   </style>
@@ -51,7 +51,7 @@
         <label><input type="checkbox" value="7"     checked> 7 (dominante)</label>
         <label><input type="checkbox" value="-7b5"  checked> Min7♭5</label>
         <label><input type="checkbox" value="Dim7"  checked> Dim7</label>
-        <label><input type="checkbox" value="Maj2"  checked> Maj/2</label>  <!-- ← CHANGEMENT ICI -->
+        <label><input type="checkbox" value="Maj2"  checked> Maj/2</label>
       </div>
       <div class="buttons-bottom" style="justify-content:flex-start">
         <button id="select-all-chords" class="ctrl-btn white" type="button">Tout sélectionner</button>
